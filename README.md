@@ -1,4 +1,4 @@
-# Godot ECS Framework 🚀![](images/ecs.png)
+# Godot ECS Framework (WingedHakurei Fork) 🚀![](images/ecs.png)
 
 [简体中文](./README_CN.md)
 
@@ -40,10 +40,10 @@ var _runner: ECSRunner
 func _ready() -> void:
     # Create world
     _world = ECSWorld.new("MyGameWorld")
-    
+
     # Create a runner for single-threaded systems (recommended approach)
     _runner = _world.create_runner("GameLogic")
-    
+
     # Add systems to the runner
     _runner.add_system("MoveSystem", SysMovement.new())
 
@@ -76,7 +76,7 @@ class CompPos extends ECSComponent:
 
 class CompVel extends ECSDataComponent:
     # ECSDataComponent comes with a 'data' property
-    pass 
+    pass
 ```
 
 ### 3. Using ECSRunner (Recommended)
@@ -94,14 +94,14 @@ var _runner: ECSRunner
 func _ready() -> void:
     # Create world
     _world = ECSWorld.new("MyGameWorld")
-    
+
     # Create a named runner for single-threaded systems
     _runner = _world.create_runner("GameLogic")
-    
+
     # Add systems to the runner (supports method chaining)
     _runner.add_system("MoveSystem", SysMovement.new())
            .add_system("RenderSystem", SysRender.new())
-    
+
     # Create an entity
     var entity = _world.create_entity()
     entity.add_component("Position", CompPos.new(0, 0))
@@ -169,7 +169,7 @@ class SysPhysics extends ECSParallel:
 ### Direct Mode vs Scheduled Mode
 
 | Feature               | ECSSystem (Direct)                  | ECSParallel (Scheduled)                           |
-|:--------------------- |:----------------------------------- |:------------------------------------------------- |
+| :-------------------- | :---------------------------------- | :------------------------------------------------ |
 | **Primary Use**       | Game logic, UI, Input, Flow control | Physics, AI, Massive data operations              |
 | **Threading Model**   | Single-threaded (Main Thread)       | **Multi-threaded (WorkerThreadPool)**             |
 | **State Management**  | Stateful allowed                    | Stateless, Pure Logic                             |

@@ -1,4 +1,4 @@
-# Godot ECS Framework 🚀![](images/ecs.png)
+# Godot ECS Framework (WingedHakurei Fork) 🚀![](images/ecs.png)
 
 [English](./README.md)
 
@@ -40,10 +40,10 @@ var _runner: ECSRunner
 func _ready() -> void:
     # 创建世界
     _world = ECSWorld.new("MyGameWorld")
-    
+
     # 创建执行器用于管理单线程系统（推荐方式）
     _runner = _world.create_runner("GameLogic")
-    
+
     # 向执行器添加系统
     _runner.add_system("MoveSystem", SysMovement.new())
 
@@ -76,7 +76,7 @@ class CompPos extends ECSComponent:
 
 class CompVel extends ECSDataComponent:
     # ECSDataComponent 自带一个 data 属性
-    pass 
+    pass
 ```
 
 ### 3. 使用 ECSRunner（推荐）
@@ -94,14 +94,14 @@ var _runner: ECSRunner
 func _ready() -> void:
     # 创建世界
     _world = ECSWorld.new("MyGameWorld")
-    
+
     # 创建命名执行器用于管理单线程系统
     _runner = _world.create_runner("GameLogic")
-    
+
     # 向执行器添加系统（支持链式调用）
     _runner.add_system("MoveSystem", SysMovement.new())
            .add_system("RenderSystem", SysRender.new())
-    
+
     # 创建一个实体
     var entity = _world.create_entity()
     entity.add_component("Position", CompPos.new(0, 0))
@@ -168,13 +168,13 @@ class SysPhysics extends ECSParallel:
 
 ### Direct Mode vs Scheduled Mode
 
-| 特性       | ECSSystem (Direct) | ECSParallel (Scheduled)     |
-|:-------- |:------------------ |:--------------------------- |
-| **主要用途** | 游戏逻辑, UI, 输入, 流程控制 | 物理, AI, 大规模数据运算             |
-| **线程模型** | 单线程 (主线程)          | **多线程 (WorkerThreadPool)**  |
-| **状态管理** | 允许持有状态 (Stateful)  | 无状态 (Stateless), 纯逻辑        |
-| **执行顺序** | 手动添加顺序             | **自动依赖排序 (.after/.before)** |
-| **数据修改** | 直接调用 API           | **使用 CommandBuffer 延迟修改**   |
+| 特性         | ECSSystem (Direct)           | ECSParallel (Scheduled)           |
+| :----------- | :--------------------------- | :-------------------------------- |
+| **主要用途** | 游戏逻辑, UI, 输入, 流程控制 | 物理, AI, 大规模数据运算          |
+| **线程模型** | 单线程 (主线程)              | **多线程 (WorkerThreadPool)**     |
+| **状态管理** | 允许持有状态 (Stateful)      | 无状态 (Stateless), 纯逻辑        |
+| **执行顺序** | 手动添加顺序                 | **自动依赖排序 (.after/.before)** |
+| **数据修改** | 直接调用 API                 | **使用 CommandBuffer 延迟修改**   |
 
 ### 目录结构
 
