@@ -134,8 +134,8 @@ func _on_exit(w: ECSWorld) -> void:
 ## Override: Called each frame when update cycle runs.
 ## Use for per-frame processing logic.
 ## @param _delta: The time elapsed since the last frame in seconds.
-#func _on_update(_delta: float) -> void:
-#	pass
+func _on_update(_delta: float) -> void:
+	pass
 
 # ==============================================================================
 # Private Methods
