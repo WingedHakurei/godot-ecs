@@ -75,7 +75,7 @@ func send(e: GameEvent) -> void:
 ## @return: This ECSEntity for chaining.
 ## Usage: entity.add(CompHealth.new())
 func add(component: ECSComponent) -> ECSEntity:
-	if component == null: 
+	if component == null:
 		return self
 	var name = world().resolve_name(component)
 	if not name.is_empty():
@@ -89,7 +89,7 @@ func add(component: ECSComponent) -> ECSEntity:
 ## @deprecated: Use add() or remove() instead for shorter, cleaner syntax.
 func add_component(key: Variant, component := ECSComponent.new()) -> bool:
 	var name = world().resolve_name(key)
-	if name.is_empty(): 
+	if name.is_empty():
 		return false
 	return world().add_component(_id, name, component)
 
@@ -98,7 +98,7 @@ func add_component(key: Variant, component := ECSComponent.new()) -> bool:
 ## @return: True if the component was successfully removed.
 func remove(key: Variant) -> bool:
 	var name = world().resolve_name(key)
-	if name.is_empty(): 
+	if name.is_empty():
 		return false
 	return world().remove_component(_id, name)
 
@@ -108,7 +108,7 @@ func remove(key: Variant) -> bool:
 ## @deprecated: Use remove() instead for shorter syntax.
 func remove_component(key: Variant) -> bool:
 	var name = world().resolve_name(key)
-	if name.is_empty(): 
+	if name.is_empty():
 		return false
 	return world().remove_component(_id, name)
 
@@ -128,7 +128,7 @@ func remove_all_components() -> bool:
 ## @return: The ECSComponent instance, or null if not found.
 func getc(key: Variant) -> ECSComponent:
 	var name = world().resolve_name(key)
-	if name.is_empty(): 
+	if name.is_empty():
 		return null
 	return world().get_component(_id, name)
 
@@ -138,7 +138,7 @@ func getc(key: Variant) -> ECSComponent:
 ## @deprecated: Use getc() instead for shorter syntax.
 func get_component(key: Variant) -> ECSComponent:
 	var name = world().resolve_name(key)
-	if name.is_empty(): 
+	if name.is_empty():
 		return null
 	return world().get_component(_id, name)
 
