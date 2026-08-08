@@ -54,12 +54,18 @@ class_name ECSWorld  # Required for all public classes
 - **Component Names**: StringName identifiers (`"Health"`, `"Position"`, `"Velocity"`)
 
 ### Type Hints (Required)
-Always use explicit return types and parameter types:
+- **Mandatory** explicit type annotations for parameters, return values, and variables — unless the type is auto-inferred by the engine (e.g., `:=` with an initializer, or a typed loop variable like `for c: ECSComponent in ...`)
+- **Avoid `Variant`** as much as possible; prefer concrete types and typed containers (`Array[ECSComponent]`, `Dictionary[StringName, int]`)
+- **Strengthen type constraints**: use `StringName` over `String` for identifiers, typed arrays/dictionaries over untyped ones, and `as T` casts where dynamic access is unavoidable
 ```gdscript
 func name() -> StringName:
     return _name
 
 func add_component(entity_id: int, name: StringName, component: ECSComponent) -> bool:
+
+var healths: Array[ECSComponent] = world.view(CompHealth)
+var views: Dictionary[StringName, ECSComponent]
+var hp: CompHealth = e.getc(CompHealth) as CompHealth
 ```
 
 ### String Types
