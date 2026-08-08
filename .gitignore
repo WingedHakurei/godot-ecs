@@ -17,3 +17,11 @@ mono_crash.*.json
 android
 output
 addons/script-ide
+
+# IDE
+.vscode/
+.vs/
+.idea/
+
+# AI plans
+plan/
