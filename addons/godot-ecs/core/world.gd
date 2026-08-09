@@ -551,20 +551,6 @@ func _get_type_list(name: StringName) -> Dictionary:
 		_type_component_dict[name] = {}
 	return _type_component_dict[name]
 
-## Internal: Gets a dictionary containing entity and specified components.
-## @param e: The ECSEntity to query.
-## @param names: Array of component names to retrieve.
-## @return: Dictionary with "entity" key and component entries.
-func _get_satisfy_components(e: ECSEntity, names: Array) -> Dictionary:
-	var result := {
-		"entity": e,
-	}
-	for c: ECSComponent in names.map(func(key: StringName):
-		return get_component(e.id(), key)
-	):
-		result.set(c.name(), c)
-	return result
-
 ## Internal: Adds a component to an entity's component dictionary.
 ## @param entity_id: The entity ID.
 ## @param name: The component name.

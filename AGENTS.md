@@ -59,7 +59,7 @@ class_name ECSWorld  # Required for all public classes
 - **Strengthen type constraints**: use `StringName` over `String` for identifiers, typed arrays/dictionaries over untyped ones, and `as T` casts where dynamic access is unavoidable
 ```gdscript
 func name() -> StringName:
-    return _name
+	return _name
 
 func add_component(entity_id: int, name: StringName, component: ECSComponent) -> bool:
 
@@ -147,19 +147,19 @@ const QueryCache = preload("query_cache.gd")
 ```
 addons/
   GodotECS/          # Core framework
-    Component/       # Base component classes
-    system.gd        # ECSSystem base
-    parallel_system.gd  # ECSParallel base
-    world.gd         # ECSWorld entry point
-    entity.gd        # ECSEntity wrapper
-    querier.gd       # Query builder
-    scheduler.gd     # DAG-based scheduler
-    test_suite.gd    # Full test suite
-    test_scheduler.gd # Scheduler stress tests
+	Component/       # Base component classes
+	system.gd        # ECSSystem base
+	parallel_system.gd  # ECSParallel base
+	world.gd         # ECSWorld entry point
+	entity.gd        # ECSEntity wrapper
+	querier.gd       # Query builder
+	scheduler.gd     # DAG-based scheduler
+	test_suite.gd    # Full test suite
+	test_scheduler.gd # Scheduler stress tests
   GodotUtils/        # Utilities
-    event.gd         # GameEvent
-    event_center.gd  # Event system
-    packer.gd        # Serialization
+	event.gd         # GameEvent
+	event_center.gd  # Event system
+	packer.gd        # Serialization
 demo/                # Examples
   sync/              # Direct mode examples
   async/             # Parallel mode examples

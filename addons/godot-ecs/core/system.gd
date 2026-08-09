@@ -1,8 +1,6 @@
 extends Node
 class_name ECSSystem
 
-const ECSEntitySpawner = preload("entity_spawner.gd")
-
 ## A system class for processing component data on the main thread.
 ## Inherits from Node to utilize RPC functionality, which is essential for online games
 ## as it greatly simplifies the implementation of network synchronization.
@@ -56,9 +54,6 @@ func multi_view_cache(names: Array) -> ECSWorld.QueryCache:
 ## @return: A new Querier instance configured with this system's world.
 func query() -> ECSWorld.Querier:
 	return _world.query()
-
-func spawn() -> ECSEntitySpawner:
-	return ECSEntitySpawner.new(_world)
 
 # ==============================================================================
 # Public API - Lifecycle Callbacks

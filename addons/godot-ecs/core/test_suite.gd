@@ -74,8 +74,23 @@ func _assert(condition: bool, msg: String) -> void:
 # ==============================================================================
 
 # Define some test components
-class CompHealth extends ECSDataComponent: pass
-class CompMana extends ECSDataComponent: pass
+class CompHealth extends ECSComponent:
+	var data: int = 0
+	func _init(v: int = 0) -> void:
+		data = v
+	func _on_pack(ar: Serializer.Archive) -> void:
+		ar.set_var("data", data)
+	func _on_unpack(ar: Serializer.Archive) -> void:
+		data = ar.get_var("data", 0)
+
+class CompMana extends ECSComponent:
+	var data: int = 0
+	func _init(v: int = 0) -> void:
+		data = v
+	func _on_pack(ar: Serializer.Archive) -> void:
+		ar.set_var("data", data)
+	func _on_unpack(ar: Serializer.Archive) -> void:
+		data = ar.get_var("data", 0)
 class CompPos extends ECSComponent: 
 	var x: int = 0
 	var y: int = 0
@@ -130,7 +145,7 @@ func _test_entity_component_crud() -> void:
 	_assert(hp.data == 100, "Health data value check")
 	
 	# Update Data
-	hp.set_data(50)
+	hp.data = 50
 	_assert((e.get_component("Health") as CompHealth).data == 50, "Health data update check")
 	
 	# Remove Component
@@ -381,7 +396,7 @@ class SysProducer extends ECSParallel:
 		return {"Val": ECSParallel.READ_WRITE}
 	func _view_components(view: Dictionary, cmds: ECSSchedulerCommands) -> void:
 		# Add 1 to all entities with Val component
-		var c = view["Val"] as ECSDataComponent
+		var c = view["Val"] as CompHealth
 		c.data += 1
 
 # Simulate a system that consumes data, must run after Producer
@@ -396,7 +411,7 @@ class SysConsumer extends ECSParallel:
 		super.thread_function(delta)
 		
 	func _view_components(view: Dictionary, cmds: ECSSchedulerCommands) -> void:
-		var c = view["Val"] as ECSDataComponent
+		var c = view["Val"] as CompHealth
 		total_sum += c.data
 
 func _test_scheduler_dependency() -> void:
