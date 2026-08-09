@@ -22,7 +22,7 @@ Written purely in GDScript, this framework aims to solve the coupling problems a
 ## 📦 Installation
 
 1. Download this repository.
-2. Copy the `GodotECS` and `GodotUtils` folders to your Godot project's `res://` root directory.
+2. Copy the `addons/godot-ecs` folder to your Godot project's `res://addons/` directory.
 3. Done! No plugin configuration needed, reference directly in code.
 
 ## ⚡ Quick Start
@@ -41,23 +41,19 @@ func _ready() -> void:
     # Create world
     _world = ECSWorld.new("MyGameWorld")
 
-    # Create a runner for single-threaded systems (recommended approach)
+    # Create a runner for single-threaded systems
     _runner = _world.create_runner("GameLogic")
 
-    # Add systems to the runner
-    _runner.add_system("MoveSystem", SysMovement.new())
+    # Add systems to the runner (systems are keyed by class)
+    _runner.add_system(SysMovement.new())
 
-    # Create an entity
+    # Create an entity and add components
     var entity = _world.create_entity()
-    entity.add_component("Position", CompPos.new(0, 0))
-    entity.add_component("Velocity", CompVel.new(10, 0))
-
-# OLD WAY (deprecated, for reference):
-# _world.add_system("MoveSystem", SysMovement.new())
-# _world.update(delta)
+    entity.add(CompPos.new(0, 0))
+    entity.add(CompVel.new(10, 0))
 
 func _process(delta: float) -> void:
-    # Drive runner updates (recommended way)
+    # Drive runner updates
     _runner.run(delta)
 
 func _exit_tree() -> void:
@@ -72,18 +68,18 @@ Components are simply data containers.
 class CompPos extends ECSComponent:
     var x: float = 0
     var y: float = 0
-    func _init(px=0, py=0): x=px; y=py
+    func _init(px: float = 0, py: float = 0) -> void: x = px; y = py
 
-class CompVel extends ECSDataComponent:
-    # ECSDataComponent comes with a 'data' property
-    pass
+class CompVel extends ECSComponent:
+    var data: float = 0
+    func _init(v: float = 0) -> void: data = v
 ```
 
 ### 3. Using ECSRunner (Recommended)
 
 **ECSRunner** is the recommended way to manage single-threaded systems. It provides system grouping, better organization, and a consistent API style with ECSScheduler.
 
-> **Note**: The direct `world.add_system()` and `world.update()` methods are **deprecated** but still supported for backward compatibility.
+> **Note**: The legacy `world.add_system()` and `world.update()` methods have been **removed**. Use `ECSRunner` for all single-threaded systems.
 
 ```gdscript
 extends Node
@@ -99,16 +95,16 @@ func _ready() -> void:
     _runner = _world.create_runner("GameLogic")
 
     # Add systems to the runner (supports method chaining)
-    _runner.add_system("MoveSystem", SysMovement.new())
-           .add_system("RenderSystem", SysRender.new())
+    _runner.add_system(SysMovement.new())
+           .add_system(SysRender.new())
 
     # Create an entity
     var entity = _world.create_entity()
-    entity.add_component("Position", CompPos.new(0, 0))
-    entity.add_component("Velocity", CompVel.new(10, 0))
+    entity.add(CompPos.new(0, 0))
+    entity.add(CompVel.new(10, 0))
 
 func _process(delta: float) -> void:
-    # Drive runner updates (instead of world.update())
+    # Drive runner updates
     _runner.run(delta)
 
 func _exit_tree() -> void:
@@ -133,11 +129,11 @@ Suitable for game logic, input, and UI.
 class SysMovement extends ECSSystem:
     func _on_update(delta: float) -> void:
         # Get all entities with Position and Velocity
-        var list = world().multi_view(["Position", "Velocity"])
+        var list: Array[Dictionary] = world().multi_view([CompPos, CompVel])
 
         for item in list:
-            var pos = item["Position"]
-            var vel = item["Velocity"]
+            var pos: CompPos = item[CompPos] as CompPos
+            var vel: CompVel = item[CompVel] as CompVel
             pos.x += vel.data * delta
 ```
 
@@ -147,21 +143,19 @@ Suitable for physics simulation and AI clusters. Supports dependency sorting and
 
 ```gdscript
 class SysPhysics extends ECSParallel:
-    func _init(): super._init("Physics")
-
     # 1. Declare read/write permissions for scheduler analysis
-    func _list_components() -> Dictionary:
+    func _list_components() -> Dictionary[GDScript, int]:
         return {
-            "Position": ECSParallel.READ_WRITE,
-            "Velocity": ECSParallel.READ_ONLY
+            CompPos: ECSParallel.READ_WRITE,
+            CompVel: ECSParallel.READ_ONLY
         }
 
     # 2. Enable multi-threaded parallel processing
     func _parallel() -> bool: return true
 
     # 3. Business logic (Pass in thread-safe CommandBuffer)
-    func _view_components(view: Dictionary, cmds: ECSParallel.Commands) -> void:
-        view["Position"].x += view["Velocity"].data * delta
+    func _view_components(view: Dictionary, cmds: Commands) -> void:
+        (view[CompPos] as CompPos).x += (view[CompVel] as CompVel).data * delta
 ```
 
 ## 🏗️ Architecture Overview
@@ -178,8 +172,8 @@ class SysPhysics extends ECSParallel:
 
 ### Directory Structure
 
-* `GodotECS/`: Core framework code (World, Entity, System, Scheduler).
-* `GodotUtils/`: Utility libraries (EventCenter, Serialization, Factory).
+* `addons/godot-ecs/core/`: Core framework code (World, Entity, System, Runner, Scheduler).
+* `addons/godot-ecs/utils/`: Utility libraries (EventCenter, Serialization, Factory).
 
 ## 💾 Serialization Support
 

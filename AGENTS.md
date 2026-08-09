@@ -5,11 +5,11 @@ This document provides guidelines for AI agents working on this Godot ECS framew
 ## Build, Test & Run
 
 ### Running the Project
-- **Editor**: Open the project in Godot 4.5+ via `godot_mcp_launch_editor` or the Godot editor directly
+- **Editor**: Open the project in Godot 4.7+ via `godot_mcp_launch_editor` or the Godot editor directly
 - **Headless Testing**: Run `godot_mcp_run_project` with specific scene paths
 
 ### Running Tests
-Tests are located in `addons/GodotECS/`:
+Tests are located in `addons/godot-ecs/core/`:
 - **Full Test Suite**: `ECSTestSuite.new().run()` - Tests CRUD, queries, events, commands, scheduler, serialization
 - **Scheduler Stress Test**: `ECSSchedulerStressTest.new().run()` - Tests dependency analysis, conflict resolution, cyclic detection
 
@@ -37,8 +37,8 @@ suite._teardown()
 ### File Organization
 - One class per file (except inner test classes)
 - Filename must match class name: `class_name ECSWorld` → `world.gd`
-- Core framework in `addons/GodotECS/`
-- Utilities in `addons/GodotUtils/`
+- Core framework in `addons/godot-ecs/core/`
+- Utilities in `addons/godot-ecs/utils/`
 
 ### Class Declaration
 ```gdscript
@@ -51,7 +51,7 @@ class_name ECSWorld  # Required for all public classes
 - **Methods/Variables**: snake_case (`entity_id`, `debug_print`, `multi_view`)
 - **Private Members**: Leading underscore (`_name`, `_entity_pool`, `_on_update`)
 - **Constants**: SCREAMING_SNAKE_CASE (`VERSION`, `READ_ONLY`, `READ_WRITE`)
-- **Component Names**: StringName identifiers (`"Health"`, `"Position"`, `"Velocity"`)
+- **Component/System identity**: component names are derived from `class_name` (GDScript class as the public key); `StringName` is the internal storage key
 
 ### Type Hints (Required)
 - **Mandatory** explicit type annotations for parameters, return values, and variables — unless the type is auto-inferred by the engine (e.g., `:=` with an initializer, or a typed loop variable like `for c: ECSComponent in ...`)
@@ -61,7 +61,7 @@ class_name ECSWorld  # Required for all public classes
 func name() -> StringName:
 	return _name
 
-func add_component(entity_id: int, name: StringName, component: ECSComponent) -> bool:
+func add_component(entity_id: int, component: ECSComponent) -> bool:
 
 var healths: Array[ECSComponent] = world.view(CompHealth)
 var views: Dictionary[StringName, ECSComponent]
@@ -93,28 +93,28 @@ var message: String = "entity created"
 - Use `weakref()` to avoid circular references with `WeakRef`
 
 ### Component Design
-- Data components extend `ECSDataComponent` (has `.data` property)
-- Complex components extend `ECSComponent`
+- Components extend `ECSComponent` (data-only; no `World`/`Entity`/system references)
+- Component names derive from `class_name` (fallback: filename basename)
 - Override `_on_pack(ar: Archive)` and `_on_unpack(ar: Archive)` for serialization
 - Never store `World` or `Entity` references directly; use `WeakRef`
 
 ### System Design
-- **Direct Mode**: Extend `ECSSystem` for single-threaded, stateful systems
-- **Parallel Mode**: Extend `ECSParallel` for multi-threaded, stateless systems
-- Override `_list_components() -> Dictionary` to declare read/write access
-- Use `_parallel() -> bool` to enable WorkerThreadPool execution
-- Use `before()`/`after()` for explicit dependency declarations
+- **Direct Mode**: Extend `ECSSystem` (Node) for single-threaded, stateful systems; override `_on_enter/_on_exit/_on_update`
+- **Parallel Mode**: Extend `ECSParallel` for multi-threaded, stateless systems; `_list_components`/`_view_components` are `@abstract`
+- Systems are keyed by class (GDScript); **only one instance per class** per runner/scheduler
+- `_list_components() -> Dictionary[GDScript, int]` declares read/write access; use `_parallel() -> bool` to enable WorkerThreadPool
+- Use `before(systems: Array[GDScript])`/`after(systems: Array[GDScript])` for explicit dependency declarations
 
 ### Query Patterns
 ```gdscript
 # Single component view
-var healths = world.view("Health")
+var healths: Array[ECSComponent] = world.view(CompHealth)
 
-# Multi-component AND query (cached)
-var results = world.multi_view(["Position", "Velocity"])
+# Multi-component AND query (cached; view dicts keyed by component class)
+var results: Array[Dictionary] = world.multi_view([CompPos, CompVel])
 
 # Complex queries with Querier
-var query = world.query().with(["Health"]).without(["Mana"]).exec()
+var query: Array[Dictionary] = world.query().with([CompHealth]).without([CompMana]).exec()
 ```
 
 ### Testing Patterns
@@ -146,29 +146,38 @@ const QueryCache = preload("query_cache.gd")
 ## Project Structure
 ```
 addons/
-  GodotECS/          # Core framework
-	Component/       # Base component classes
-	system.gd        # ECSSystem base
-	parallel_system.gd  # ECSParallel base
-	world.gd         # ECSWorld entry point
-	entity.gd        # ECSEntity wrapper
-	querier.gd       # Query builder
-	scheduler.gd     # DAG-based scheduler
-	test_suite.gd    # Full test suite
-	test_scheduler.gd # Scheduler stress tests
-  GodotUtils/        # Utilities
-	event.gd         # GameEvent
-	event_center.gd  # Event system
-	packer.gd        # Serialization
+  godot-ecs/           # Framework root
+    core/              # ECS core
+      component.gd     # ECSComponent base
+      system.gd        # ECSSystem base (Node, direct mode)
+      parallel_system.gd  # ECSParallel base (@abstract)
+      world.gd         # ECSWorld entry point
+      entity.gd        # ECSEntity wrapper
+      querier.gd       # Query builder
+      query_cache.gd   # Cached multi-view results
+      scheduler.gd     # DAG-based scheduler
+      scheduler_commands.gd # Command buffer
+      runner.gd        # Sequential system executor
+      packer.gd        # World serialization
+      debug_entity.gd  # Debug entity wrapper
+      test_suite.gd    # Full test suite
+      test_scheduler.gd # Scheduler stress tests
+    utils/             # Utilities
+      event.gd         # GameEvent
+      event_center.gd  # Event system
+      factory.gd       # Object factory (serialization)
+      packer.gd / pack.gd / byte_stream.gd
+      serialization/   # Archive/Serializer
 demo/                # Examples
-  sync/              # Direct mode examples
-  async/             # Parallel mode examples
+  sync/              # Direct mode (runner) examples
+  async/             # Parallel mode (scheduler) examples
 ```
 
 ## Key Design Principles
 1. **Zero GDExtension**: Pure GDScript for easy debugging
-2. **Dual Mode**: Direct (main thread) vs Parallel (worker threads)
-3. **DAG Scheduling**: Automatic dependency resolution
-4. **O(1) Queries**: Cached query results via `QueryCache`
-5. **Stateless Parallel**: Parallel systems must be pure functions
-6. **Weak References**: Prevent memory leaks in component/entity
+2. **Dual Mode**: Direct (main thread, `ECSSystem`) vs Parallel (worker threads, `ECSParallel`)
+3. **Type-Safe Keys**: Public component/system keys are GDScript classes; `StringName` is internal
+4. **DAG Scheduling**: Automatic dependency resolution
+5. **O(1) Queries**: Cached query results via `QueryCache`
+6. **Stateless Parallel**: Parallel systems must be pure functions
+7. **Weak References**: Prevent memory leaks in component/entity
