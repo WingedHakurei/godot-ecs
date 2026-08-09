@@ -147,27 +147,27 @@ const QueryCache = preload("query_cache.gd")
 ```
 addons/
   godot-ecs/           # Framework root
-    core/              # ECS core
-      component.gd     # ECSComponent base
-      system.gd        # ECSSystem base (Node, direct mode)
-      parallel_system.gd  # ECSParallel base (@abstract)
-      world.gd         # ECSWorld entry point
-      entity.gd        # ECSEntity wrapper
-      querier.gd       # Query builder
-      query_cache.gd   # Cached multi-view results
-      scheduler.gd     # DAG-based scheduler
-      scheduler_commands.gd # Command buffer
-      runner.gd        # Sequential system executor
-      packer.gd        # World serialization
-      debug_entity.gd  # Debug entity wrapper
-      test_suite.gd    # Full test suite
-      test_scheduler.gd # Scheduler stress tests
-    utils/             # Utilities
-      event.gd         # GameEvent
-      event_center.gd  # Event system
-      factory.gd       # Object factory (serialization)
-      packer.gd / pack.gd / byte_stream.gd
-      serialization/   # Archive/Serializer
+	core/              # ECS core
+	  component.gd     # ECSComponent base
+	  system.gd        # ECSSystem base (Node, direct mode)
+	  parallel_system.gd  # ECSParallel base (@abstract)
+	  world.gd         # ECSWorld entry point
+	  entity.gd        # ECSEntity wrapper
+	  querier.gd       # Query builder
+	  query_cache.gd   # Cached multi-view results
+	  scheduler.gd     # DAG-based scheduler
+	  scheduler_commands.gd # Command buffer
+	  runner.gd        # Sequential system executor
+	  packer.gd        # World serialization
+	  debug_entity.gd  # Debug entity wrapper
+	  test_suite.gd    # Full test suite
+	  test_scheduler.gd # Scheduler stress tests
+	utils/             # Utilities
+	  event.gd         # GameEvent
+	  event_center.gd  # Event system
+	  factory.gd       # Object factory (serialization)
+	  packer.gd / pack.gd / byte_stream.gd
+	  serialization/   # Archive/Serializer
 demo/                # Examples
   sync/              # Direct mode (runner) examples
   async/             # Parallel mode (scheduler) examples
