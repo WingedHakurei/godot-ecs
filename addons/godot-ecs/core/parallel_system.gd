@@ -143,8 +143,8 @@ func _parallel() -> bool:
 	return false
 
 ## Override: Returns the list of components this system accesses with their read/write permissions.
-## @return: Dictionary mapping component StringName to access mode (READ_ONLY or READ_WRITE).
-func _list_components() -> Dictionary[StringName, int]:
+## @return: Dictionary mapping component class (GDScript) to access mode (READ_ONLY or READ_WRITE).
+func _list_components() -> Dictionary[GDScript, int]:
 	return {}
 
 ## Override: Processes component data for a single view.

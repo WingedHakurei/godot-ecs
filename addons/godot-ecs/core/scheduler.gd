@@ -244,7 +244,7 @@ class DependencyBuilder extends RefCounted:
 	## @return: True if adding this system would cause a write conflict.
 	func _is_conflict(sys_name: StringName, batch_reads: Dictionary, batch_writes: Dictionary) -> bool:
 		var sys_access: Dictionary = _conflict.get(sys_name, {})
-		for comp: StringName in sys_access:
+		for comp: GDScript in sys_access:
 			var access_type: int = sys_access[comp]
 			if batch_writes.has(comp):
 				return true
@@ -259,7 +259,7 @@ class DependencyBuilder extends RefCounted:
 	## @param batch_writes: Dictionary to record write accesses.
 	func _mark_access(sys_name: StringName, batch_reads: Dictionary, batch_writes: Dictionary) -> void:
 		var sys_access: Dictionary = _conflict.get(sys_name, {})
-		for comp: StringName in sys_access:
+		for comp: GDScript in sys_access:
 			var access_type: int = sys_access[comp]
 			if access_type == ECSParallel.READ_ONLY:
 				batch_reads[comp] = true

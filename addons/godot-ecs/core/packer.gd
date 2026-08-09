@@ -46,13 +46,13 @@ func _unpack(pack: DataPack) -> bool:
 # ==============================================================================
 
 var _w: ECSWorld
-var _filter: Array[StringName]
+var _filter: Array[GDScript]
 var _factory := ObjectFactory.new()
 
 ## Creates a new ECSWorldPacker for the specified world.
 ## @param w: The ECSWorld to serialize.
-## @param filter: Optional array of component names to filter during packing.
-func _init(w: ECSWorld, filter: Array[StringName] = []) -> void:
+## @param filter: Optional array of component classes (GDScript) to filter during packing.
+func _init(w: ECSWorld, filter: Array[GDScript] = []) -> void:
 	_w = w
 	_filter = filter
 
@@ -92,14 +92,14 @@ func _pack_entities(dict: Dictionary) -> void:
 ## @param dict: The dictionary to populate with component data.
 ## @param uid_list: The list to populate with component type UIDs.
 func _pack_components(e: ECSEntity, dict: Dictionary, uid_list: Array[int]) -> void:
-	for c: ECSComponent in e.get_components():
+	for c: ECSComponent in e.getc_all():
 		var c_dict := {}
 		var output := Serializer.OutputArchive.new(c_dict)
 		c.pack(output)
 		dict[c.name()] = c_dict
 		
 		var uid := _factory.object_to_uid(c)
-		var pos = uid_list.find(uid)
+		var pos: int = uid_list.find(uid)
 		if pos == -1:
 			uid_list.append(uid)
 			pos = uid_list.size() - 1
@@ -133,10 +133,6 @@ func _unpack_entities(dict: Dictionary) -> bool:
 		var entity_dict: Dictionary = dict.entities[eid]
 		_unpack_components(_w.get_entity(eid), entity_dict["components"], uid_list)
 	
-	for eid: int in dict.entities:
-		var entity_dict: Dictionary = dict.entities[eid]
-		_unpack_archives(_w.get_entity(eid), entity_dict["components"])
-	
 	_w._entity_id = dict["last_entity_id"]
 	
 	return true
@@ -147,7 +143,7 @@ func _unpack_entities(dict: Dictionary) -> bool:
 func _valid_version(version: StringName) -> bool:
 	return true
 
-## Internal: Unpacks component instances from the dictionary.
+## Internal: Unpacks component instances and their archives from the dictionary.
 ## @param e: The entity to add components to.
 ## @param dict: The dictionary containing component data.
 ## @param uid_list: The list of component type UIDs.
@@ -162,19 +158,11 @@ func _unpack_components(e: ECSEntity, dict: Dictionary, uid_list: Array[int]) ->
 		
 		var uid := uid_list[index]
 		var c: ECSComponent = _factory.uid_to_object(uid)
-		if c:
-			e.add_component(name, c)
-		else:
-			e.add_component(name)
+		if c == null:
 			push_error("unpack component fail: script <%s> is not exist!" % ResourceUID.id_to_text(uid_list[index]))
-
-## Internal: Unpacks component data archives.
-## @param e: The entity whose components to populate.
-## @param dict: The dictionary containing component archive data.
-func _unpack_archives(e: ECSEntity, dict: Dictionary) -> void:
-	for name: StringName in dict:
-		var c_dict: Dictionary = dict[name]
-		var c: ECSComponent = e.get_component(name)
+			continue
+		
+		e.add(c)
 		var input := Serializer.InputArchive.new(c_dict)
 		_load_component_archive(c, input)
 

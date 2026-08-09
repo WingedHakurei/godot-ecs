@@ -70,12 +70,16 @@ func _uid_to_object(uid: int) -> Object:
 		return load(path).new()
 	return creater.call()
 
-## Internal: Gets UID for a class type.
+## Internal: Gets a stable type UID for a class type.
+## Uses the script's real resource UID when it has a path; otherwise falls back
+## to its instance id (stable within a run, used for inner/path-less classes).
 ## @param type: The Resource to get UID for.
 ## @return: The type UID.
 func _get_class_uid(type: Resource) -> int:
-	var path := "uid://%s" % type
-	return ResourceUID.create_id_for_path(path)
+	var path: String = type.resource_path
+	if not path.is_empty():
+		return ResourceLoader.get_resource_uid(path)
+	return type.get_instance_id()
 
 ## Internal: Creates a callable constructor with parameters.
 ## @param uid: The type UID.

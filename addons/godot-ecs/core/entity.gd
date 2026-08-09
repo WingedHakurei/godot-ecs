@@ -54,7 +54,7 @@ func valid() -> bool:
 ## Sends a notification event to the world.
 ## @param event_name: The StringName identifier for the event.
 ## @param value: Optional value data to send with the event.
-func notify(event_name: StringName, value = null) -> void:
+func notify(event_name: StringName, value: Variant = null) -> void:
 	if _id == 0:
 		return
 	world().notify(event_name, value)
@@ -77,100 +77,36 @@ func send(e: GameEvent) -> void:
 func add(component: ECSComponent) -> ECSEntity:
 	if component == null:
 		return self
-	var name = world().resolve_name(component)
-	if not name.is_empty():
-		add_component(name, component)
+	world().add_component(_id, component)
 	return self
 
-## Adds a component to this entity.
-## @param key: The StringName identifier, Script, or Component class for the component type.
-## @param component: The ECSComponent instance to add. Defaults to empty ECSComponent.
-## @return: True if the component was successfully added.
-## @deprecated: Use add() or remove() instead for shorter, cleaner syntax.
-func add_component(key: Variant, component := ECSComponent.new()) -> bool:
-	var name = world().resolve_name(key)
-	if name.is_empty():
-		return false
-	return world().add_component(_id, name, component)
-
 ## Removes a component from this entity.
-## @param key: The StringName identifier, Script, or Component class for the component type to remove.
+## @param key: The component class (GDScript) to remove.
 ## @return: True if the component was successfully removed.
-func remove(key: Variant) -> bool:
-	var name = world().resolve_name(key)
-	if name.is_empty():
-		return false
-	return world().remove_component(_id, name)
-
-## Removes a component from this entity.
-## @param key: The StringName identifier, Script, or Component class for the component type to remove.
-## @return: True if the component was successfully removed.
-## @deprecated: Use remove() instead for shorter syntax.
-func remove_component(key: Variant) -> bool:
-	var name = world().resolve_name(key)
-	if name.is_empty():
-		return false
-	return world().remove_component(_id, name)
+func remove(key: GDScript) -> bool:
+	return world().remove_component(_id, key)
 
 ## Removes all components from this entity.
 ## @return: True if all components were removed.
 func remove_all() -> bool:
 	return world().remove_all_components(_id)
 
-## Removes all components from this entity.
-## @return: True if all components were removed.
-## @deprecated: Use remove_all() instead for shorter syntax.
-func remove_all_components() -> bool:
-	return world().remove_all_components(_id)
-
 ## Gets a specific component from this entity.
-## @param key: The StringName identifier, Script, or Component class for the component type.
+## @param key: The component class (GDScript) to get.
 ## @return: The ECSComponent instance, or null if not found.
-func getc(key: Variant) -> ECSComponent:
-	var name = world().resolve_name(key)
-	if name.is_empty():
-		return null
-	return world().get_component(_id, name)
-
-## Gets a specific component from this entity.
-## @param key: The StringName identifier, Script, or Component class for the component type.
-## @return: The ECSComponent instance, or null if not found.
-## @deprecated: Use getc() instead for shorter syntax.
-func get_component(key: Variant) -> ECSComponent:
-	var name = world().resolve_name(key)
-	if name.is_empty():
-		return null
-	return world().get_component(_id, name)
+func getc(key: GDScript) -> ECSComponent:
+	return world().get_component(_id, key)
 
 ## Gets all components attached to this entity.
 ## @return: Array of ECSComponent instances.
-func getc_all() -> Array:
-	return world().get_components(_id)
-
-## Gets all components attached to this entity.
-## @return: Array of ECSComponent instances.
-## @deprecated: Use getc_all() instead for shorter syntax.
-func get_components() -> Array:
+func getc_all() -> Array[ECSComponent]:
 	return world().get_components(_id)
 
 ## Checks if this entity has a specific component.
-## @param key: The StringName identifier, Script, or Component class for the component type.
+## @param key: The component class (GDScript) to check.
 ## @return: True if the entity has the component.
-func has(key: Variant) -> bool:
-	var name = world().resolve_name(key)
-	if name.is_empty():
-		return false
-	return world().has_component(_id, name)
-
-## Checks if this entity has a specific component.
-## @param key: The StringName identifier, Script, or Component class for the component type.
-## @return: True if the entity has the component.
-## @deprecated: Use has() instead for shorter syntax.
-func has_component(key: Variant) -> bool:
-	var name = world().resolve_name(key)
-	if name.is_empty():
-		return false
-	return world().has_component(_id, name)
+func has(key: GDScript) -> bool:
+	return world().has_component(_id, key)
 
 # ==============================================================================
 # Private Methods

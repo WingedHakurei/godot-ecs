@@ -30,25 +30,25 @@ func world() -> ECSWorld:
 
 ## Queries entities with a specific component type.
 ## Emits on_system_viewed signal for tracking system access patterns.
-## @param name: The StringName identifier for the component type.
+## @param key: The component class (GDScript) to query.
 ## @return: Array of ECSComponent instances.
-func view(name: StringName) -> Array:
-	_world.on_system_viewed.emit(self.name(), [name])
-	return _world.view(name)
+func view(key: GDScript) -> Array[ECSComponent]:
+	_world.on_system_viewed.emit(self.name(), [key])
+	return _world.view(key)
 
 ## Queries entities with multiple specified component types (AND logic).
 ## Emits on_system_viewed signal for tracking system access patterns.
-## @param names: Array of StringName component types to query.
-## @return: Array of Dictionary views containing entity and component data.
-func multi_view(names: Array) -> Array:
-	_world.on_system_viewed.emit(self.name(), names)
-	return _world.multi_view(names)
+## @param keys: Array of component classes (GDScript) to query.
+## @return: Array of Dictionary views keyed by component class.
+func multi_view(keys: Array[GDScript]) -> Array[Dictionary]:
+	_world.on_system_viewed.emit(self.name(), keys)
+	return _world.multi_view(keys)
 
 ## Gets or creates a cached query for multi-component queries.
-## @param names: Array of StringName component types to query.
+## @param keys: Array of component classes (GDScript) to query.
 ## @return: QueryCache instance for the component combination.
-func multi_view_cache(names: Array) -> ECSWorld.QueryCache:
-	return _world.multi_view_cache(names)
+func multi_view_cache(keys: Array[GDScript]) -> ECSWorld.QueryCache:
+	return _world.multi_view_cache(keys)
 
 ## Creates a Querier for building complex entity queries with filters.
 ## @return: A new Querier instance configured with this system's world.
@@ -83,7 +83,7 @@ func on_exit(w: ECSWorld) -> void:
 ## Sends a notification event to the world.
 ## @param event_name: The StringName identifier for the event.
 ## @param value: Optional value data to send with the event.
-func notify(event_name: StringName, value = null) -> void:
+func notify(event_name: StringName, value: Variant = null) -> void:
 	world().notify(event_name, value)
 
 ## Sends a GameEvent to the world.
