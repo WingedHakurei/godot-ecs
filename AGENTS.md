@@ -9,9 +9,10 @@ This document provides guidelines for AI agents working on this Godot ECS framew
 - **Headless Testing**: Run `godot_mcp_run_project` with specific scene paths
 
 ### Running Tests
-Tests are located in `addons/godot-ecs/core/`:
+Tests are located in `tests/`:
 - **Full Test Suite**: `ECSTestSuite.new().run()` - Tests CRUD, queries, events, commands, scheduler, serialization
 - **Scheduler Stress Test**: `ECSSchedulerStressTest.new().run()` - Tests dependency analysis, conflict resolution, cyclic detection
+- **Headless Runner**: `godot --headless --path <project> --script res://tests/run_tests.gd` (exit code 1 on failure)
 
 To run a single test:
 ```gdscript
@@ -160,14 +161,16 @@ addons/
 	  runner.gd        # Sequential system executor
 	  packer.gd        # World serialization
 	  debug_entity.gd  # Debug entity wrapper
-	  test_suite.gd    # Full test suite
-	  test_scheduler.gd # Scheduler stress tests
 	utils/             # Utilities
 	  event.gd         # GameEvent
 	  event_center.gd  # Event system
 	  factory.gd       # Object factory (serialization)
 	  packer.gd / pack.gd / byte_stream.gd
 	  serialization/   # Archive/Serializer
+tests/               # Test suites
+  run_tests.gd        # Headless test runner
+  test_suite.gd       # Full test suite
+  test_scheduler.gd   # Scheduler stress tests
 demo/                # Examples
   sync/              # Direct mode (runner) examples
   async/             # Parallel mode (scheduler) examples
