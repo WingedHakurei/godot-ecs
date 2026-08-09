@@ -3,13 +3,16 @@ extends Node2D
 var _world := ECSWorld.new("AsyncDemo")
 var _scheduler: ECSScheduler
 
+class DummyComp extends ECSComponent:
+	pass
+
 class LightWorkSystem extends ECSParallel:
 	# override
 	func _parallel() -> bool:
 		return false
-	func _list_components() -> Dictionary[StringName, int]:
+	func _list_components() -> Dictionary[GDScript, int]:
 		return {
-			&"component_name": READ_ONLY,
+			DummyComp: READ_ONLY,
 		}
 	func _view_components(_view: Dictionary, _commands: Commands) -> void:
 		pass
@@ -18,9 +21,9 @@ class HeavyWorkSystem extends ECSParallel:
 	func _parallel() -> bool:
 		return true
 	# override
-	func _list_components() -> Dictionary[StringName, int]:
+	func _list_components() -> Dictionary[GDScript, int]:
 		return {
-			&"component_name": READ_WRITE,
+			DummyComp: READ_WRITE,
 		}
 	# override
 	func _view_components(_view: Dictionary, _commands: Commands) -> void:

@@ -30,7 +30,7 @@ func _process(delta: float) -> void:
 	_world.update(delta)
 	
 func _connect_components() -> void:
-	for c: MyComponent in _world.view("my_component"):
+	for c: MyComponent in _world.view(MyComponent):
 		c.on_score_changed.connect(_on_score_changed)
 		c.on_seconds_changed.connect(_on_seconds_changed)
 	

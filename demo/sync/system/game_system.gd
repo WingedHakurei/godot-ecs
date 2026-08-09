@@ -26,8 +26,8 @@ func _init_entity():
 	# create entity
 	var e = world().create_entity()
 	# add component
-	e.add_component("player_unit")
-	e.add_component("my_component", MyComponent.new())
+	e.add(PlayerUnit.new())
+	e.add(MyComponent.new())
 	
 func _free_entity():
 	world().remove_all_entities()
