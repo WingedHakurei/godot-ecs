@@ -118,6 +118,13 @@ class MockSystem extends ECSSystem:
 	func _on_update(delta: float) -> void:
 		update_count += 1
 
+# Distinct mock system classes (systems are keyed by class; one instance per class per runner)
+class MockSystemB extends MockSystem:
+	pass
+
+class MockSystemC extends MockSystem:
+	pass
+
 # Mock system without _on_update for edge case testing
 class SystemNoUpdate extends ECSSystem:
 	pass
@@ -385,7 +392,6 @@ func _test_commands_defer() -> void:
 # --- Scheduler Mock Systems ---
 # Simulate a system that produces data
 class SysProducer extends ECSParallel:
-	func _init(): super._init("Producer")
 	func _list_components() -> Dictionary[GDScript, int]:
 		return {CompHealth: ECSParallel.READ_WRITE}
 	func _view_components(view: Dictionary, cmds: ECSSchedulerCommands) -> void:
@@ -396,7 +402,6 @@ class SysProducer extends ECSParallel:
 # Simulate a system that consumes data, must run after Producer
 class SysConsumer extends ECSParallel:
 	var total_sum: int = 0
-	func _init(): super._init("Consumer")
 	func _list_components() -> Dictionary[GDScript, int]:
 		return {CompHealth: ECSParallel.READ_ONLY}
 	func _parallel() -> bool: return false # Set to single-threaded for easier accumulation testing
@@ -421,7 +426,7 @@ func _test_scheduler_dependency() -> void:
 	var sys_cons = SysConsumer.new()
 	
 	# Set dependency: Consumer must run after Producer
-	sys_cons.after(["Producer"])
+	sys_cons.after([SysProducer])
 	
 	scheduler.add_systems([sys_prod, sys_cons])
 	scheduler.build()
@@ -489,28 +494,28 @@ func _test_runner_system_management() -> void:
 	
 	# Test: Add single system
 	var sys1 = MockSystem.new()
-	runner.add_system("Sys1", sys1)
-	_assert(runner.get_system("Sys1") == sys1, "Add single system - system retrieved correctly")
+	runner.add_system(sys1)
+	_assert(runner.get_system(sys1.get_script() as GDScript) == sys1, "Add single system - system retrieved correctly")
 	_assert(runner.get_systems().size() == 1, "Add single system - count correct")
 	
 	# Test: Add multiple systems
-	var sys2 = MockSystem.new()
-	var sys3 = MockSystem.new()
-	runner.add_systems({"Sys2": sys2, "Sys3": sys3})
+	var sys2 = MockSystemB.new()
+	var sys3 = MockSystemC.new()
+	runner.add_systems([sys2, sys3])
 	_assert(runner.get_systems().size() == 3, "Add multiple systems - count correct")
-	_assert(runner.get_system("Sys2") == sys2, "Add multiple systems - Sys2 retrieved")
-	_assert(runner.get_system("Sys3") == sys3, "Add multiple systems - Sys3 retrieved")
+	_assert(runner.get_system(sys2.get_script() as GDScript) == sys2, "Add multiple systems - Sys2 retrieved")
+	_assert(runner.get_system(sys3.get_script() as GDScript) == sys3, "Add multiple systems - Sys3 retrieved")
 	
-	# Test: Replace system with same name
+	# Test: Replace system with same class
 	var sys1_new = MockSystem.new()
-	runner.add_system("Sys1", sys1_new)
-	_assert(runner.get_system("Sys1") == sys1_new, "Replace system - new system retrieved")
+	runner.add_system(sys1_new)
+	_assert(runner.get_system(sys1.get_script() as GDScript) == sys1_new, "Replace system - new system retrieved")
 	_assert(sys1.exit_called, "Replace system - old system exit called")
 	_assert(sys1_new.enter_called, "Replace system - new system enter called")
 	
 	# Test: Remove system
-	runner.remove_system("Sys2")
-	_assert(runner.get_system("Sys2") == null, "Remove system - system is null")
+	runner.remove_system(sys2.get_script() as GDScript)
+	_assert(runner.get_system(sys2.get_script() as GDScript) == null, "Remove system - system is null")
 	_assert(runner.get_systems().size() == 2, "Remove system - count reduced")
 	_assert(sys2.exit_called, "Remove system - exit called")
 	
@@ -527,24 +532,24 @@ func _test_runner_update_control() -> void:
 	
 	# Test: Run one frame
 	var sys1 = MockSystem.new()
-	var sys2 = MockSystem.new()
-	runner.add_systems({"Sys1": sys1, "Sys2": sys2})
+	var sys2 = MockSystemB.new()
+	runner.add_systems([sys1, sys2])
 	runner.run(0.016)
 	_assert(sys1.update_count == 1, "Run frame - Sys1 update called once")
 	_assert(sys2.update_count == 1, "Run frame - Sys2 update called once")
 	
 	# Test: Disable single system
-	runner.set_system_update("Sys1", false)
-	_assert(not runner.is_system_updating("Sys1"), "Disable system - is_system_updating returns false")
-	_assert(runner.is_system_updating("Sys2"), "Disable system - other system still updating")
+	runner.set_system_update(sys1.get_script() as GDScript, false)
+	_assert(not runner.is_system_updating(sys1.get_script() as GDScript), "Disable system - is_system_updating returns false")
+	_assert(runner.is_system_updating(sys2.get_script() as GDScript), "Disable system - other system still updating")
 	
 	runner.run(0.016)
 	_assert(sys1.update_count == 1, "Disable system - Sys1 not updated")
 	_assert(sys2.update_count == 2, "Disable system - Sys2 updated")
 	
 	# Test: Enable system again
-	runner.set_system_update("Sys1", true)
-	_assert(runner.is_system_updating("Sys1"), "Enable system - is_system_updating returns true")
+	runner.set_system_update(sys1.get_script() as GDScript, true)
+	_assert(runner.is_system_updating(sys1.get_script() as GDScript), "Enable system - is_system_updating returns true")
 	
 	runner.run(0.016)
 	_assert(sys1.update_count == 2, "Enable system - Sys1 updated again")
@@ -552,8 +557,8 @@ func _test_runner_update_control() -> void:
 	
 	# Test: Disable all systems
 	runner.set_systems_update(false)
-	_assert(not runner.is_system_updating("Sys1"), "Disable all - Sys1 not updating")
-	_assert(not runner.is_system_updating("Sys2"), "Disable all - Sys2 not updating")
+	_assert(not runner.is_system_updating(sys1.get_script() as GDScript), "Disable all - Sys1 not updating")
+	_assert(not runner.is_system_updating(sys2.get_script() as GDScript), "Disable all - Sys2 not updating")
 	
 	runner.run(0.016)
 	_assert(sys1.update_count == 2, "Disable all - Sys1 not updated")
@@ -561,8 +566,8 @@ func _test_runner_update_control() -> void:
 	
 	# Test: Enable all systems
 	runner.set_systems_update(true)
-	_assert(runner.is_system_updating("Sys1"), "Enable all - Sys1 updating")
-	_assert(runner.is_system_updating("Sys2"), "Enable all - Sys2 updating")
+	_assert(runner.is_system_updating(sys1.get_script() as GDScript), "Enable all - Sys1 updating")
+	_assert(runner.is_system_updating(sys2.get_script() as GDScript), "Enable all - Sys2 updating")
 	
 	runner.run(0.016)
 	_assert(sys1.update_count == 3, "Enable all - Sys1 updated")
@@ -576,18 +581,18 @@ func _test_runner_lifecycle() -> void:
 	# Test: _on_enter is called when adding system
 	var sys = MockSystem.new()
 	_assert(not sys.enter_called, "Before add - enter not called")
-	runner.add_system("TestSys", sys)
+	runner.add_system(sys)
 	_assert(sys.enter_called, "After add - enter called")
 	
 	# Test: System name and world reference are set
-	_assert(sys.name() == "TestSys", "System name set correctly")
+	_assert(not sys.name().is_empty(), "System name derived from class")
 	_assert(sys.world() == _world, "System world reference set correctly")
 	
 	# Test: _on_exit is called when removing system
-	var sys2 = MockSystem.new()
-	runner.add_system("TestSys2", sys2)
+	var sys2 = MockSystemB.new()
+	runner.add_system(sys2)
 	_assert(not sys2.exit_called, "Before remove - exit not called")
-	runner.remove_system("TestSys2")
+	runner.remove_system(sys2.get_script() as GDScript)
 	_assert(sys2.exit_called, "After remove - exit called")
 	
 	_world.destroy_runner("TestRunner")
@@ -596,27 +601,27 @@ func _test_runner_edge_cases() -> void:
 	var runner = _world.create_runner("TestRunner")
 	
 	# Test: Remove non-existent system
-	var result = runner.remove_system("NonExistent")
+	var result = runner.remove_system(MockSystemC)
 	_assert(not result, "Remove non-existent system returns false")
 	
 	# Test: Get non-existent system
-	var sys = runner.get_system("NonExistent")
+	var sys = runner.get_system(MockSystemC)
 	_assert(sys == null, "Get non-existent system returns null")
 	
 	# Test: Enable/disable non-existent system (should not crash)
-	runner.set_system_update("NonExistent", true)
-	runner.set_system_update("NonExistent", false)
+	runner.set_system_update(MockSystemC, true)
+	runner.set_system_update(MockSystemC, false)
 	_assert(true, "Enable/disable non-existent system does not crash")
 	
 	# Test: Check update status of non-existent system
-	var updating = runner.is_system_updating("NonExistent")
+	var updating = runner.is_system_updating(MockSystemC)
 	_assert(not updating, "is_system_updating for non-existent returns false")
 	
-	# Test: System without _on_update method
+	# Test: System without _on_update override (base no-op is connected, running does not crash)
 	var sys_no_update = SystemNoUpdate.new()
-	runner.add_system("NoUpdate", sys_no_update)
-	_assert(runner.is_system_updating("NoUpdate") == false, "System without _on_update not connected")
-	runner.run(0.016) # Should not crash
+	runner.add_system(sys_no_update)
+	_assert(runner.is_system_updating(SystemNoUpdate), "System connected via base _on_update no-op")
+	runner.run(0.016)
 	_assert(true, "Running with system without _on_update does not crash")
 	
 	_world.destroy_runner("TestRunner")

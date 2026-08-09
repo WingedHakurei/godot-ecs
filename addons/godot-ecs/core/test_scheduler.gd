@@ -2,7 +2,7 @@ extends RefCounted
 class_name ECSSchedulerStressTest
 
 # ==============================================================================
-# Helper: Strict System for Testing
+# Helper: Dynamic Strict Systems for Testing
 # ==============================================================================
 
 class Comp1 extends ECSComponent: pass
@@ -10,24 +10,43 @@ class CompData extends ECSComponent: pass
 class CompShared extends ECSComponent: pass
 class CompDummy extends ECSComponent: pass
 
-class StrictSystem extends ECSParallel:
-	var _read_list: Array[GDScript] = []
-	var _write_list: Array[GDScript] = []
-	
-	func _init(n: StringName, reads: Array[GDScript] = [], writes: Array[GDScript] = []):
-		super._init(n)
-		_read_list.assign(reads)
-		_write_list.assign(writes)
-	
-	# Override: Define Resource Access
-	func _list_components() -> Dictionary[GDScript, int]:
-		var dict: Dictionary[GDScript, int] = {}
-		for r in _read_list: dict[r] = ECSParallel.READ_ONLY
-		for w in _write_list: dict[w] = ECSParallel.READ_WRITE
-		return dict
-		
-	# Override: No-op logic, we inspect the plan, not the execution result
-	func _view_components(_view: Dictionary, _cmds) -> void: pass
+const _STRICT_SCRIPT_SOURCE := """
+extends \"res://addons/godot-ecs/core/parallel_system.gd\"
+
+var _reads: Array[GDScript] = []
+var _writes: Array[GDScript] = []
+
+func _init() -> void:
+	super._init()
+
+func configure(reads: Array[GDScript], writes: Array[GDScript]) -> void:
+	_reads = reads
+	_writes = writes
+
+func _list_components() -> Dictionary[GDScript, int]:
+	var d: Dictionary[GDScript, int] = {}
+	for r in _reads:
+		d[r] = READ_ONLY
+	for w in _writes:
+		d[w] = READ_WRITE
+	return d
+
+func _view_components(_view: Dictionary, _cmds) -> void:
+	pass
+"""
+
+# Systems are keyed by class (one instance per class), so every test system gets a
+# freshly generated, distinct class at runtime.
+func _make_strict_script() -> GDScript:
+	var s := GDScript.new()
+	s.source_code = _STRICT_SCRIPT_SOURCE
+	s.reload()
+	return s
+
+func _mk_sys(reads: Array[GDScript], writes: Array[GDScript]) -> ECSParallel:
+	var inst: ECSParallel = _make_strict_script().new()
+	inst.configure(reads, writes)
+	return inst
 
 # ==============================================================================
 # Test Runner
@@ -50,7 +69,6 @@ func run() -> void:
 		print_rich("[b][color=green]ALL STRICT TESTS PASSED! Scheduler is Robust.[/color][/b]")
 	else:
 		print_rich("[b][color=red]CRITICAL FAILURE: Scheduler logic is flawed![/color][/b]")
-		# 强制报错以中断 CI/CD 流程
 		assert(_fail_count == 0, "Scheduler Verification Failed")
 	
 	_teardown()
@@ -89,33 +107,31 @@ func _test_resource_conflict_serialization() -> void:
 	# SysC: Read [Comp1]  -> Conflict with A or B (RW)
 	# SysD: Read [Comp1]  -> Compatible with C (RR)
 	
-	var sys_a = StrictSystem.new("A", [], [Comp1])
-	var sys_b = StrictSystem.new("B", [], [Comp1])
-	var sys_c = StrictSystem.new("C", [Comp1], [])
-	var sys_d = StrictSystem.new("D", [Comp1], [])
+	var sys_a := _mk_sys([], [Comp1])
+	var sys_b := _mk_sys([], [Comp1])
+	var sys_c := _mk_sys([Comp1], [])
+	var sys_d := _mk_sys([Comp1], [])
 	
 	# 注意：我们故意不设置 before/after，完全依赖调度器的资源分析
 	scheduler.add_systems([sys_a, sys_b, sys_c, sys_d])
 	scheduler.build()
 	
-	var plan = _extract_plan(scheduler)
+	var plan := _extract_plan(scheduler)
 	_print_plan(plan)
 	
 	# 验证 1: A 和 B 绝不能在同一层 (写写冲突)
-	var batch_a = _find_batch_index(plan, "A")
-	var batch_b = _find_batch_index(plan, "B")
+	var batch_a := _find_batch_index(plan, sys_a)
+	var batch_b := _find_batch_index(plan, sys_b)
 	_assert(batch_a != batch_b, "WW Conflict: A and B must be in different batches")
 	
 	# 验证 2: 写者(A/B) 和 读者(C/D) 绝不能在同一层 (读写冲突)
-	var batch_c = _find_batch_index(plan, "C")
-	var batch_d = _find_batch_index(plan, "D")
+	var batch_c := _find_batch_index(plan, sys_c)
+	var batch_d := _find_batch_index(plan, sys_d)
 	
 	_assert(batch_a != batch_c, "RW Conflict: A and C must be separated")
 	_assert(batch_b != batch_c, "RW Conflict: B and C must be separated")
 	
 	# 验证 3: 读者之间应该并行 (读读优化)
-	# 注意：如果调度器足够聪明，C和D应该在同一层，除非它们被拆分到了 A 和 B 之间
-	# 但核心要求是它们不与写者冲突。如果它们都在同一层，那就是完美优化。
 	if batch_c == batch_d:
 		print("  [Info] Read-Read Optimization verified (C and D in same batch)")
 	
@@ -135,26 +151,26 @@ func _test_diamond_dependency() -> void:
 	#     \     /
 	#      End
 	
-	var s_start = StrictSystem.new("Start", [], [CompData])
-	var s_left = StrictSystem.new("Left", [CompData], [])
-	var s_right = StrictSystem.new("Right", [CompData], [])
-	var s_end = StrictSystem.new("End", [], [CompData])
+	var s_start := _mk_sys([], [CompData])
+	var s_left := _mk_sys([CompData], [])
+	var s_right := _mk_sys([CompData], [])
+	var s_end := _mk_sys([], [CompData])
 	
-	# 设置显式依赖
-	s_left.after(["Start"])
-	s_right.after(["Start"])
-	s_end.after(["Left", "Right"])
+	# 设置显式依赖（按系统类引用）
+	s_left.after([s_start.get_script() as GDScript])
+	s_right.after([s_start.get_script() as GDScript])
+	s_end.after([s_left.get_script() as GDScript, s_right.get_script() as GDScript])
 	
 	scheduler.add_systems([s_start, s_left, s_right, s_end])
 	scheduler.build()
 	
-	var plan = _extract_plan(scheduler)
+	var plan := _extract_plan(scheduler)
 	_print_plan(plan)
 	
-	var i_start = _find_batch_index(plan, "Start")
-	var i_left = _find_batch_index(plan, "Left")
-	var i_right = _find_batch_index(plan, "Right")
-	var i_end = _find_batch_index(plan, "End")
+	var i_start := _find_batch_index(plan, s_start)
+	var i_left := _find_batch_index(plan, s_left)
+	var i_right := _find_batch_index(plan, s_right)
+	var i_end := _find_batch_index(plan, s_end)
 	
 	# 严格拓扑验证
 	_assert(i_start < i_left, "Topology: Start < Left")
@@ -163,7 +179,6 @@ func _test_diamond_dependency() -> void:
 	_assert(i_end > i_right, "Topology: End > Right")
 	
 	# 验证并行性: Left 和 Right 理论上可以在同一层 (因为都是只读且依赖相同)
-	# 除非它们有其他隐式冲突。在这个简单的测试中，期望它们并行。
 	if i_left == i_right:
 		print("  [Info] Diamond parallel execution verified (Left and Right in same batch)")
 
@@ -174,52 +189,51 @@ func _test_diamond_dependency() -> void:
 func _test_massive_chain_and_width() -> void:
 	var scheduler = _world.create_scheduler("Massive")
 	var systems: Array[ECSParallel] = []
-	var count = 100
+	var scripts: Array[GDScript] = []
+	var count := 100
 	
-	# 创建 100 个系统
+	# 创建 100 个运行时生成的独立系统类
 	# 偶数索引构成一条长链: 0 -> 2 -> 4 -> ... -> 98
 	# 奇数索引全部依赖于 System 0: 0 -> 1, 0 -> 3, ... (宽依赖)
 	
 	for i in range(count):
-		var sys = StrictSystem.new("Sys_%d" % i, [CompShared], [])
+		var sys := _mk_sys([CompShared], [])
 		systems.append(sys)
+		scripts.append(sys.get_script() as GDScript)
 	
 	for i in range(count):
-		var sys = systems[i]
+		var sys := systems[i]
 		
 		# Chain logic
 		if i % 2 == 0 and i > 0:
-			sys.after(["Sys_%d" % (i - 2)])
+			sys.after([scripts[i - 2]])
 			
-		# Fan-out logic (Odd numbers depend on Sys_0)
+		# Fan-out logic (Odd numbers depend on System 0)
 		if i % 2 != 0:
-			sys.after(["Sys_0"])
+			sys.after([scripts[0]])
 	
 	scheduler.add_systems(systems)
 	
-	var time_start = Time.get_ticks_usec()
+	var time_start := Time.get_ticks_usec()
 	scheduler.build()
-	var time_end = Time.get_ticks_usec()
+	var time_end := Time.get_ticks_usec()
 	
 	print("  [Perf] Build time for 100 systems: %d us" % (time_end - time_start))
 	
-	var plan = _extract_plan(scheduler)
-	# plan too large to print
+	var plan := _extract_plan(scheduler)
 	
 	# 验证长链顺序
-	var last_idx = -1
+	var last_idx := -1
 	for i in range(0, count, 2):
-		var name = "Sys_%d" % i
-		var idx = _find_batch_index(plan, name)
-		_assert(idx > last_idx, "Chain Integrity: %s (Batch %d) > Prev (Batch %d)" % [name, idx, last_idx])
+		var idx := _find_batch_index(plan, systems[i])
+		_assert(idx > last_idx, "Chain Integrity: sys_%d (Batch %d) > Prev (Batch %d)" % [i, idx, last_idx])
 		last_idx = idx
 		
 	# 验证扇出 (Fan-out)
-	var root_idx = _find_batch_index(plan, "Sys_0")
+	var root_idx := _find_batch_index(plan, systems[0])
 	for i in range(1, count, 2):
-		var name = "Sys_%d" % i
-		var idx = _find_batch_index(plan, name)
-		_assert(idx > root_idx, "Fan-out Integrity: %s > Sys_0" % name)
+		var idx := _find_batch_index(plan, systems[i])
+		_assert(idx > root_idx, "Fan-out Integrity: sys_%d > sys_0" % i)
 
 # ==============================================================================
 # 4. 循环依赖 (死锁) 测试
@@ -231,11 +245,11 @@ func _test_cyclic_dependency() -> void:
 	
 	var scheduler = _world.create_scheduler("Cyclic")
 	
-	var sys_a = StrictSystem.new("A", [CompDummy])
-	var sys_b = StrictSystem.new("B", [CompDummy])
+	var sys_a := _mk_sys([CompDummy], [])
+	var sys_b := _mk_sys([CompDummy], [])
 	
-	sys_b.after(["A"])
-	sys_a.after(["B"]) # Cycle!
+	sys_b.after([sys_a.get_script() as GDScript])
+	sys_a.after([sys_b.get_script() as GDScript]) # Cycle!
 	
 	scheduler.add_systems([sys_a, sys_b])
 	
@@ -244,7 +258,7 @@ func _test_cyclic_dependency() -> void:
 	# 这里可能会打印 Error，这是预期的
 	scheduler.build()
 	
-	var plan = _extract_plan(scheduler)
+	var plan := _extract_plan(scheduler)
 	
 	# 如果有循环，DependencyBuilder 的 while 循环会检测到 ready_queue 为空但 processed_count 不够
 	# 从而 break。结果可能为空，或者包含部分非循环节点。
@@ -255,27 +269,20 @@ func _test_cyclic_dependency() -> void:
 # Internal Helpers (Introspection)
 # ==============================================================================
 
-# 使用反射/Hack技巧直接读取调度器的私有变量 _batch_systems
-# 这是验证调度器逻辑最绝对的方法，无需依赖多线程执行的不确定性
+# 直接读取调度器的私有变量 _batch_systems（内部为 Array[Array[ECSParallel]]）
 func _extract_plan(scheduler: ECSScheduler) -> Array:
-	# _batch_systems 是 Array[Array[ECSParallel]]
-	# 我们把它转成更易读的 Array[Array[StringName]]
-	var raw_batches = scheduler._batch_systems
-	var result = []
-	for batch in raw_batches:
-		var batch_names = []
-		for sys in batch:
-			batch_names.append(sys.name())
-		result.append(batch_names)
-	return result
+	return scheduler._batch_systems
 
-func _find_batch_index(plan: Array, sys_name: StringName) -> int:
+func _find_batch_index(plan: Array, sys: Object) -> int:
 	for i in range(plan.size()):
-		if sys_name in plan[i]:
+		if sys in plan[i]:
 			return i
 	return -1
 
 func _print_plan(plan: Array) -> void:
 	print("  [Plan] Execution Order:")
 	for i in range(plan.size()):
-		print("    Batch %d: %s" % [i, str(plan[i])])
+		var names: Array = []
+		for sys: ECSParallel in plan[i]:
+			names.append(sys.name())
+		print("    Batch %d: %s" % [i, str(names)])
