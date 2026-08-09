@@ -1,8 +1,6 @@
 extends Node
 class_name ECSSystem
 
-const ECSEntitySpawner = preload("entity_spawner.gd")
-
 ## A system class for processing component data on the main thread.
 ## Inherits from Node to utilize RPC functionality, which is essential for online games
 ## as it greatly simplifies the implementation of network synchronization.
@@ -32,33 +30,30 @@ func world() -> ECSWorld:
 
 ## Queries entities with a specific component type.
 ## Emits on_system_viewed signal for tracking system access patterns.
-## @param name: The StringName identifier for the component type.
+## @param key: The component class (GDScript) to query.
 ## @return: Array of ECSComponent instances.
-func view(name: StringName) -> Array:
-	_world.on_system_viewed.emit(self.name(), [name])
-	return _world.view(name)
+func view(key: GDScript) -> Array[ECSComponent]:
+	_world.on_system_viewed.emit(self.name(), [key])
+	return _world.view(key)
 
 ## Queries entities with multiple specified component types (AND logic).
 ## Emits on_system_viewed signal for tracking system access patterns.
-## @param names: Array of StringName component types to query.
-## @return: Array of Dictionary views containing entity and component data.
-func multi_view(names: Array) -> Array:
-	_world.on_system_viewed.emit(self.name(), names)
-	return _world.multi_view(names)
+## @param keys: Array of component classes (GDScript) to query.
+## @return: Array of Dictionary views keyed by component class.
+func multi_view(keys: Array[GDScript]) -> Array[Dictionary]:
+	_world.on_system_viewed.emit(self.name(), keys)
+	return _world.multi_view(keys)
 
 ## Gets or creates a cached query for multi-component queries.
-## @param names: Array of StringName component types to query.
+## @param keys: Array of component classes (GDScript) to query.
 ## @return: QueryCache instance for the component combination.
-func multi_view_cache(names: Array) -> ECSWorld.QueryCache:
-	return _world.multi_view_cache(names)
+func multi_view_cache(keys: Array[GDScript]) -> ECSWorld.QueryCache:
+	return _world.multi_view_cache(keys)
 
 ## Creates a Querier for building complex entity queries with filters.
 ## @return: A new Querier instance configured with this system's world.
 func query() -> ECSWorld.Querier:
 	return _world.query()
-
-func spawn() -> ECSEntitySpawner:
-	return ECSEntitySpawner.new(_world)
 
 # ==============================================================================
 # Public API - Lifecycle Callbacks
@@ -88,7 +83,7 @@ func on_exit(w: ECSWorld) -> void:
 ## Sends a notification event to the world.
 ## @param event_name: The StringName identifier for the event.
 ## @param value: Optional value data to send with the event.
-func notify(event_name: StringName, value = null) -> void:
+func notify(event_name: StringName, value: Variant = null) -> void:
 	world().notify(event_name, value)
 
 ## Sends a GameEvent to the world.
@@ -101,19 +96,18 @@ func send(e: GameEvent) -> void:
 # ==============================================================================
 
 ## Enables or disables this system's update callback.
+## Requires the system to be attached to a runner.
 ## @param enable: True to enable updates, false to disable.
 func set_update(enable: bool) -> void:
-	if _runner == null:
-		world().set_system_update(name(), enable)
-		return
-	_runner.set_system_update(_name, enable)
+	if _runner != null:
+		_runner.set_system_update(get_script() as GDScript, enable)
 
 ## Checks if this system is currently connected to the update cycle.
 ## @return: True if the system's update callback is connected.
 func is_updating() -> bool:
 	if _runner == null:
-		return world().is_system_updating(_name)
-	return _runner.is_system_updating(_name)
+		return false
+	return _runner.is_system_updating(get_script() as GDScript)
 
 # ==============================================================================
 # Override Methods
@@ -134,24 +128,35 @@ func _on_exit(w: ECSWorld) -> void:
 ## Override: Called each frame when update cycle runs.
 ## Use for per-frame processing logic.
 ## @param _delta: The time elapsed since the last frame in seconds.
-#func _on_update(_delta: float) -> void:
-#	pass
+func _on_update(_delta: float) -> void:
+	pass
 
 # ==============================================================================
 # Private Methods
 # ==============================================================================
 
 ## Creates the system and optionally adds it as a child of a parent node.
+## The display name is derived from the system class.
 ## @param parent: Optional parent Node to attach this system to.
-func _init(parent: Node = null):
+func _init(parent: Node = null) -> void:
 	if parent:
 		parent.add_child(self)
+	_name = _derive_name()
+	set_name(_name)
 
-## Sets the system's name identifier.
-## @param n: The StringName to assign as the system's name.
-func _set_name(n: StringName) -> void:
-	_name = n
-	set_name(n)
+## Internal: Derives a display name from the system class.
+## @return: The derived StringName identifier.
+func _derive_name() -> StringName:
+	var script: GDScript = get_script() as GDScript
+	if script == null:
+		return &"System"
+	var n: StringName = script.get_global_name()
+	if not n.is_empty():
+		return n
+	var path: String = script.resource_path
+	if not path.is_empty():
+		return path.get_file().get_basename()
+	return StringName("System_%d" % script.get_instance_id())
 
 ## Sets the world reference for this system.
 ## @param w: The ECSWorld instance to attach.

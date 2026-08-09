@@ -1,3 +1,4 @@
+@abstract
 extends RefCounted
 class_name ECSParallel
 
@@ -19,8 +20,8 @@ var delta: float:
 
 var _name: StringName
 var _views: Array
-var _before_list: Array
-var _after_list: Array
+var _before_list: Array[GDScript]
+var _after_list: Array[GDScript]
 var _group: int
 var _world: ECSWorld
 var _delta: float
@@ -47,16 +48,16 @@ func world() -> ECSWorld:
 # ==============================================================================
 
 ## Declares that this system must run before the specified systems.
-## @param systems: Array of system names that must run after this system.
+## @param systems: Array of system classes (GDScript) that must run after this system.
 ## @return: This ECSParallel instance for method chaining.
-func before(systems: Array) -> ECSParallel:
+func before(systems: Array[GDScript]) -> ECSParallel:
 	_before_list = systems
 	return self
 
 ## Declares that this system must run after the specified systems.
-## @param systems: Array of system names that must run before this system.
+## @param systems: Array of system classes (GDScript) that must run before this system.
 ## @return: This ECSParallel instance for method chaining.
-func after(systems: Array) -> ECSParallel:
+func after(systems: Array[GDScript]) -> ECSParallel:
 	_after_list = systems
 	return self
 
@@ -72,24 +73,24 @@ func in_set(value: int) -> ECSParallel:
 # ==============================================================================
 
 ## Internal: Fetches systems that this system must run before.
-## @param querier: Callable that receives (system_name, before_list).
+## @param querier: Callable that receives (system_class, before_list).
 func fetch_before_systems(querier: Callable) -> void:
-	querier.call(_name, _before_list)
+	querier.call(get_script() as GDScript, _before_list)
 
 ## Internal: Fetches systems that this system must run after.
-## @param querier: Callable that receives (system_name, after_list).
+## @param querier: Callable that receives (system_class, after_list).
 func fetch_after_systems(querier: Callable) -> void:
-	querier.call(_name, _after_list)
+	querier.call(get_script() as GDScript, _after_list)
 
 ## Internal: Fetches component access pattern for conflict detection.
-## @param querier: Callable that receives (system_name, component_table).
+## @param querier: Callable that receives (system_class, component_table).
 func fetch_conflict(querier: Callable) -> void:
-	querier.call(_name, _list_components())
+	querier.call(get_script() as GDScript, _list_components())
 
 ## Internal: Fetches scheduling group assignment.
-## @param querier: Callable that receives (system_name, group_id).
+## @param querier: Callable that receives (system_class, group_id).
 func fetch_group(querier: Callable) -> void:
-	querier.call(_name, _group)
+	querier.call(get_script() as GDScript, _group)
 
 # ==============================================================================
 # Public API - Execution
@@ -143,26 +144,39 @@ func _parallel() -> bool:
 	return false
 
 ## Override: Returns the list of components this system accesses with their read/write permissions.
-## @return: Dictionary mapping component StringName to access mode (READ_ONLY or READ_WRITE).
-func _list_components() -> Dictionary[StringName, int]:
-	return {}
+## @return: Dictionary mapping component class (GDScript) to access mode (READ_ONLY or READ_WRITE).
+@abstract
+func _list_components() -> Dictionary[GDScript, int];
 
 ## Override: Processes component data for a single view.
 ## Override this method to implement system logic.
 ## @param _view: Dictionary containing entity and component data for matched entities.
 ## @param _commands: Commands buffer for scheduling entity modifications.
-func _view_components(_view: Dictionary, _commands: Commands) -> void:
-	pass
+@abstract
+func _view_components(_view: Dictionary, _commands: Commands) -> void;
 
 # ==============================================================================
 # Private Methods
 # ==============================================================================
 
-## Internal: Creates a new ECSParallel system.
-## @param name: The StringName identifier for this system.
-func _init(name: StringName) -> void:
-	_name = name
+## Internal: Creates a new ECSParallel system. The display name is derived from its class.
+func _init() -> void:
+	_name = _derive_name()
 	_root_commands = Commands.new()
+
+## Internal: Derives a display name from the system class.
+## @return: The derived StringName identifier.
+func _derive_name() -> StringName:
+	var script: GDScript = get_script() as GDScript
+	if script == null:
+		return &"System"
+	var n: StringName = script.get_global_name()
+	if not n.is_empty():
+		return n
+	var path: String = script.resource_path
+	if not path.is_empty():
+		return path.get_file().get_basename()
+	return StringName("System_%d" % script.get_instance_id())
 
 ## Internal: Sets the world reference for this system.
 ## @param w: The ECSWorld instance to attach.

@@ -8,9 +8,9 @@ const Commands = preload("scheduler_commands.gd")
 enum {
 	OP_SPAWN = 0,       # [OP_SPAWN] -> Creates new entity, sets 'current_entity'
 	OP_DESTROY,         # [OP_DESTROY, entity_id]
-	OP_ADD_COMP,        # [OP_ADD_COMP, entity_id, name, component]
-	OP_ADD_TO_NEW,      # [OP_ADD_TO_NEW, name, component] -> Adds to 'current_entity'
-	OP_RM_COMP,         # [OP_RM_COMP, entity_id, name]
+	OP_ADD_COMP,        # [OP_ADD_COMP, entity_id, component]
+	OP_ADD_TO_NEW,      # [OP_ADD_TO_NEW, component] -> Adds to 'current_entity'
+	OP_RM_COMP,         # [OP_RM_COMP, entity_id, key]
 	OP_RM_ALL,          # [OP_RM_ALL, entity_id]
 	OP_DEFER,           # [OP_DEFER, callable] -> New OpCode
 }
@@ -109,21 +109,11 @@ func _flush_stream(world: ECSWorld) -> void:
 				last_spawned_id = e.id()
 				
 			OP_ADD_TO_NEW:
-				var key = _stream[idx]
-				var comp: ECSComponent = _stream[idx+1]
-				idx += 2
-				
-				var name: StringName
-				if key == null:
-					name = world.resolve_name(comp)
-				elif key is StringName:
-					name = key
+				var comp: ECSComponent = _stream[idx]
+				idx += 1
+				if last_spawned_id != 0:
+					world.add_component(last_spawned_id, comp)
 				else:
-					name = world.resolve_name(key)
-				
-				if last_spawned_id != 0 and not name.is_empty():
-					world.add_component(last_spawned_id, name, comp)
-				elif last_spawned_id == 0:
 					push_error("[ECS] OP_ADD_TO_NEW called without preceding OP_SPAWN")
 					
 			OP_DESTROY:
@@ -133,26 +123,15 @@ func _flush_stream(world: ECSWorld) -> void:
 				
 			OP_ADD_COMP:
 				var eid: int = _stream[idx]
-				var key = _stream[idx+1]
-				var comp: ECSComponent = _stream[idx+2]
-				idx += 3
-				
-				var name: StringName
-				if key == null:
-					name = world.resolve_name(comp)
-				elif key is StringName:
-					name = key
-				else:
-					name = world.resolve_name(key)
-				
-				if not name.is_empty():
-					world.add_component(eid, name, comp)
+				var comp: ECSComponent = _stream[idx+1]
+				idx += 2
+				world.add_component(eid, comp)
 				
 			OP_RM_COMP:
 				var eid: int = _stream[idx]
-				var name: StringName = _stream[idx+1]
+				var key: GDScript = _stream[idx+1]
 				idx += 2
-				world.remove_component(eid, name)
+				world.remove_component(eid, key)
 				
 			OP_RM_ALL:
 				var eid: int = _stream[idx]
@@ -200,26 +179,19 @@ class EntityCommands extends RefCounted:
 		_cmd = cmd
 		_id = id
 	
-	func add_component(p1: Variant, p2: ECSComponent = null) -> EntityCommands:
-		var name_var: Variant = p1
-		var comp: ECSComponent = p2
-		
-		if p1 is ECSComponent:
-			comp = p1
-			name_var = null
-		elif p2 == null:
-			comp = ECSComponent.new()
-			
+	func add_component(component: ECSComponent) -> EntityCommands:
+		if component == null:
+			push_error("[ECS] add_component requires a component instance.")
+			return self
 		_cmd._stream.append(Commands.OP_ADD_COMP)
 		_cmd._stream.append(_id)
-		_cmd._stream.append(name_var)
-		_cmd._stream.append(comp)
+		_cmd._stream.append(component)
 		return self
 		
-	func remove_component(name: StringName) -> EntityCommands:
+	func remove_component(key: GDScript) -> EntityCommands:
 		_cmd._stream.append(Commands.OP_RM_COMP)
 		_cmd._stream.append(_id)
-		_cmd._stream.append(name)
+		_cmd._stream.append(key)
 		return self
 		
 	func remove_all_components() -> EntityCommands:
@@ -238,18 +210,11 @@ class Spawner extends RefCounted:
 	func _init(cmd: Commands) -> void:
 		_cmd = cmd
 	
-	func add_component(p1: Variant, p2: ECSComponent = null) -> Spawner:
-		var name_var: Variant = p1
-		var comp: ECSComponent = p2
-		
-		if p1 is ECSComponent:
-			comp = p1
-			name_var = null
-		elif p2 == null:
-			comp = ECSComponent.new()
-			
+	func add_component(component: ECSComponent) -> Spawner:
+		if component == null:
+			push_error("[ECS] add_component requires a component instance.")
+			return self
 		_cmd._stream.append(Commands.OP_ADD_TO_NEW)
-		_cmd._stream.append(name_var)
-		_cmd._stream.append(comp)
+		_cmd._stream.append(component)
 		return self
 

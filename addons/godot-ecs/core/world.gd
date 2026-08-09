@@ -27,27 +27,23 @@ var ignore_notify_log: Dictionary
 
 ## Emitted when a system views components, used for tracking system access patterns.
 ## @param name: The name of the system that viewed components.
-## @param components: Array of component names that were accessed.
+## @param components: Array of component classes that were accessed.
 signal on_system_viewed(name: StringName, components: Array)
-
-## Emitted each frame during update, used to trigger system execution.
-## @param delta: The time elapsed since the last frame in seconds.
-signal on_update(delta: float)
 
 var _name: StringName
 
 var _entity_id: int = 0xFFFFFFFF
-var _entity_pool: Dictionary
-var _system_pool: Dictionary
+var _entity_pool: Dictionary[int, ECSEntity]
 var _event_pool := GameEventCenter.new()
 
-var _type_component_dict: Dictionary
-var _entity_component_dict: Dictionary
-var _query_caches: Dictionary
+var _type_component_dict: Dictionary[StringName, Dictionary]
+var _entity_component_dict: Dictionary[int, Dictionary]
+var _query_caches: Dictionary[String, QueryCache]
 var _scheduler_pool: Dictionary[StringName, ECSScheduler]
 var _runner_pool: Dictionary[StringName, ECSRunner]
 
-var _script_cache: Dictionary
+var _script_cache: Dictionary[GDScript, StringName]
+var _name_script_dict: Dictionary[StringName, GDScript]
 
 ## Creates a new ECSWorld instance.
 ## @param name: Optional name for this world instance, defaults to "ECSWorld".
@@ -67,7 +63,6 @@ func name() -> StringName:
 ## Cleans up all resources held by this world including systems, schedulers, and entities.
 ## Must be called before setting the world reference to null to prevent memory leaks.
 func clear() -> void:
-	remove_all_systems()
 	remove_all_runners()
 	remove_all_schedulers()
 	remove_all_entities()
@@ -115,7 +110,7 @@ func get_entity(id: int) -> ECSEntity:
 
 ## Returns all entity IDs currently in the world.
 ## @return: Array of integer entity IDs.
-func get_entity_keys() -> Array:
+func get_entity_keys() -> Array[int]:
 	return _entity_pool.keys()
 
 ## Checks if an entity with the given ID exists in the world.
@@ -128,14 +123,18 @@ func has_entity(id: int) -> bool:
 # Public API - Component Management
 # ==============================================================================
 
-## Adds a component to an entity.
+## Adds a component to an entity. The component type name is derived from its class.
 ## @param entity_id: The ID of the entity to add the component to.
-## @param name: The StringName identifier for the component type.
-## @param component: The ECSComponent instance to add. Defaults to empty ECSComponent if null.
+## @param component: The ECSComponent instance to add.
 ## @return: True if the component was successfully added, false otherwise.
 ## @assert: Component must not already be attached to a world.
-func add_component(entity_id: int, name: StringName, component := ECSComponent.new()) -> bool:
-	assert(component._world == null)
+func add_component(entity_id: int, component: ECSComponent) -> bool:
+	if component == null:
+		return false
+	var name := resolve_name(component.get_script() as GDScript)
+	if name.is_empty():
+		return false
+	assert(component._world == null, "[ECS] component already attached to a world")
 	if not _add_entity_component(entity_id, name, component):
 		return false
 	component._name = name
@@ -151,19 +150,13 @@ func add_component(entity_id: int, name: StringName, component := ECSComponent.n
 
 ## Removes a component from an entity.
 ## @param entity_id: The ID of the entity to remove the component from.
-## @param name: The StringName identifier for the component type to remove.
+## @param key: The component class (GDScript) to remove.
 ## @return: True if the component was successfully removed, false otherwise.
-func remove_component(entity_id: int, name: StringName) -> bool:
-	var c: ECSComponent = get_component(entity_id, name)
-	if not c or not _remove_entity_component(entity_id, name):
+func remove_component(entity_id: int, key: GDScript) -> bool:
+	var name := resolve_name(key)
+	if name.is_empty():
 		return false
-	for cache in _query_caches.values():
-		cache.on_component_changed(entity_id, name, false)
-	if debug_print:
-		print("component <%s:%s> remove from entity <%d>." % [_name, name, entity_id])
-	var entity: ECSEntity = c._entity
-	entity.on_component_removed.emit(entity, c)
-	return true
+	return _remove_component_by_name(entity_id, name)
 
 ## Removes all components from an entity.
 ## @param entity_id: The ID of the entity to clear components from.
@@ -173,208 +166,119 @@ func remove_all_components(entity_id: int) -> bool:
 		return false
 	var entity_dict: Dictionary = _entity_component_dict[entity_id]
 	for key: StringName in entity_dict.keys():
-		remove_component(entity_id, key)
+		_remove_component_by_name(entity_id, key)
 	return true
 
 ## Retrieves a specific component from an entity.
 ## @param entity_id: The ID of the entity to get the component from.
-## @param name: The StringName identifier for the component type.
+## @param key: The component class (GDScript) to get.
 ## @return: The ECSComponent instance, or null if not found.
-func get_component(entity_id: int, name: StringName) -> ECSComponent:
-	if not has_entity(entity_id):
+func get_component(entity_id: int, key: GDScript) -> ECSComponent:
+	var name := resolve_name(key)
+	if name.is_empty() or not has_entity(entity_id):
 		return null
 	var entity_dict: Dictionary = _entity_component_dict[entity_id]
-	if entity_dict.has(name):
-		return entity_dict[name]
-	return null
+	return entity_dict.get(name) as ECSComponent
 
 ## Retrieves all components from an entity.
 ## @param entity_id: The ID of the entity to get components from.
 ## @return: Array of ECSComponent instances.
-func get_components(entity_id: int) -> Array:
+func get_components(entity_id: int) -> Array[ECSComponent]:
 	if not has_entity(entity_id):
 		return []
-	var entity_dict: Dictionary = _entity_component_dict[entity_id]
-	return entity_dict.values()
+	var result: Array[ECSComponent] = []
+	result.assign(_entity_component_dict[entity_id].values())
+	return result
 
-## Returns all component type names registered in this world.
-## @return: Array of StringName component identifiers.
-func get_component_keys() -> Array:
-	return _type_component_dict.keys()
+## Returns all component classes registered in this world.
+## @return: Array of GDScript component classes.
+func get_component_keys() -> Array[GDScript]:
+	return _name_script_dict.values()
 
 ## Checks if an entity has a specific component.
 ## @param entity_id: The ID of the entity to check.
-## @param name: The StringName identifier for the component type.
+## @param key: The component class (GDScript) to check.
 ## @return: True if the entity has the component, false otherwise.
-func has_component(entity_id: int, name: StringName) -> bool:
-	if not has_entity(entity_id):
+func has_component(entity_id: int, key: GDScript) -> bool:
+	var name := resolve_name(key)
+	if name.is_empty() or not has_entity(entity_id):
 		return false
-	var entity_dict: Dictionary = _entity_component_dict[entity_id]
-	return entity_dict.has(name)
+	return _entity_component_dict[entity_id].has(name)
 
 # ==============================================================================
 # Public API - Type Resolution
 # ==============================================================================
 
-## Resolves a component key (StringName, Script, or Component Instance) into a valid Component Name.
-## Automatically registers the script if encountered for the first time.
-## @param key: The component key to resolve.
+## Resolves a component class (GDScript) into its canonical StringName identifier.
+## Registers the script and its reverse mapping on first encounter.
+## @param key: The component class (GDScript) to resolve.
 ## @return: The resolved StringName component identifier.
-func resolve_name(key: Variant) -> StringName:
-	if key is StringName or key is String:
-		return key
-	
-	var script: Script = null
-	if key is ECSComponent:
-		script = key.get_script()
-	elif key is Script:
-		script = key
-	
-	if not script:
-		push_error("[ECS] Cannot resolve name for invalid key: %s" % key)
+func resolve_name(key: GDScript) -> StringName:
+	if key == null:
+		push_error("[ECS] resolve_name received null script.")
 		return &""
-	
-	if _script_cache.has(script):
-		return _script_cache[script]
-	
+	if _script_cache.has(key):
+		return _script_cache[key]
+	assert(_is_component_script(key), "[ECS] %s must extend ECSComponent" % key)
 	var type_name: StringName = &""
-	
-	var global_name = script.get_global_name()
+	var global_name: StringName = key.get_global_name()
 	if not global_name.is_empty():
 		type_name = global_name
 	else:
-		var path = script.resource_path
+		var path: String = key.resource_path
 		if not path.is_empty():
 			type_name = path.get_file().get_basename()
 		else:
-			# make a type name
-			var uid := ResourceUID.create_id_for_path("uid://%s" % script)
-			type_name = ResourceUID.id_to_text(uid)
-	
-	if not type_name.is_empty():
-		_script_cache[script] = type_name
-		if not _type_component_dict.has(type_name):
-			_type_component_dict[type_name] = {}
-		if debug_print:
-			print("ECS: Auto-registered component type '%s' from script." % type_name)
-		return type_name
-	
-	push_error("[ECS] Failed to resolve component name for script: %s" % script.resource_path)
-	return &""
+			type_name = StringName("Script_%d" % key.get_instance_id())
+	_script_cache[key] = type_name
+	_name_script_dict[type_name] = key
+	if not _type_component_dict.has(type_name):
+		_type_component_dict[type_name] = {}
+	if debug_print:
+		print("ECS: Auto-registered component type '%s' from script." % type_name)
+	return type_name
+
+## Returns the component class (GDScript) registered for a given component name.
+## @param name: The canonical StringName component identifier.
+## @return: The GDScript class, or null if the name is not registered.
+func script_of(name: StringName) -> GDScript:
+	return _name_script_dict.get(name)
 
 # ==============================================================================
 # Public API - Query System
 # ==============================================================================
 
 ## Retrieves all entities that have a specific component type (single-component view).
-## @param key: The StringName identifier, Script, or Component class for the component type to query.
+## @param key: The component class (GDScript) to query.
 ## @return: Array of ECSComponent instances for all entities with the component.
-func view(key: Variant) -> Array:
-	var name = resolve_name(key)
+func view(key: GDScript) -> Array[ECSComponent]:
+	var name := resolve_name(key)
 	if name.is_empty() or not _type_component_dict.has(name):
 		return []
-	return _type_component_dict[name].values()
+	var result: Array[ECSComponent] = []
+	result.assign(_type_component_dict[name].values())
+	return result
 
 ## Retrieves entities that have all specified component types (cached AND query).
-## @param keys: Array of StringName, Script, or Component class identifiers that must all be present.
-## @return: Array of Dictionary views, each containing entity and component data.
-func multi_view(keys: Array) -> Array:
-	var names: Array = []
-	for k in keys:
-		var n = resolve_name(k)
-		if not n.is_empty():
-			names.append(n)
-	if names.is_empty():
+## @param keys: Array of component classes (GDScript) that must all be present.
+## @return: Array of Dictionary views keyed by component class, containing entity and component data.
+## @note: Returns the cache's live array; callers must not mutate its structure.
+func multi_view(keys: Array[GDScript]) -> Array[Dictionary]:
+	var cache := _multi_view_cache(keys)
+	if cache == null:
 		return []
-	
-	var cache := multi_view_cache(names)
-	return cache.results.duplicate() if cache else []
+	return cache.results
 
 ## Gets or creates a cached query for multi-component queries.
-## @param keys: Array of StringName, Script, or Component class identifiers to query.
+## @param keys: Array of component classes (GDScript) to query.
 ## @return: QueryCache instance for the component combination, or null if keys is empty.
-func multi_view_cache(keys: Array) -> QueryCache:
-	var names: Array = []
-	for k in keys:
-		var n = resolve_name(k)
-		if not n.is_empty():
-			names.append(n)
-	
-	if names.is_empty():
-		return null
-	
-	var sorted_names = names.duplicate()
-	sorted_names.sort()
-	var cache_key = "_".join(sorted_names)
-	
-	var cache: QueryCache
-	if _query_caches.has(cache_key):
-		cache = _query_caches[cache_key]
-	else:
-		cache = QueryCache.new(self, sorted_names)
-		_query_caches[cache_key] = cache
-	
-	return cache
+func multi_view_cache(keys: Array[GDScript]) -> QueryCache:
+	return _multi_view_cache(keys)
 
 ## Creates a new Querier for building complex entity queries with filters.
 ## @return: A new Querier instance configured with this world.
 func query() -> Querier:
 	return Querier.new(self)
-
-# ==============================================================================
-# Public API - System Management
-# ==============================================================================
-
-## Adds a system to the world and connects it to the update cycle.
-## @param name: The StringName identifier for the system.
-## @param system: The ECSSystem instance to add.
-## @return: True if the system was successfully added.
-## @deprecated: Use ECSRunner.add_system() instead.
-func add_system(name: StringName, system: ECSSystem) -> bool:
-	push_warning("[Deprecated] add_system() is deprecated. Use ECSRunner.add_system() instead.")
-	remove_system(name)
-	_system_pool[name] = system
-	system._set_name(name)
-	system._set_world(self)
-	set_system_update(name, true)
-	system.on_enter(self)
-	return true
-
-## Removes a system from the world and disconnects it from the update cycle.
-## @param name: The StringName identifier for the system to remove.
-## @return: True if the system was found and removed.
-func remove_system(name: StringName) -> bool:
-	if not _system_pool.has(name):
-		return false
-	set_system_update(name, false)
-	_system_pool[name].on_exit(self)
-	return _system_pool.erase(name)
-
-## Removes all systems from the world.
-## @return: Always returns true after completion.
-func remove_all_systems() -> bool:
-	for name: StringName in _system_pool.keys():
-		remove_system(name)
-	return true
-
-## Retrieves a system by its name.
-## @param name: The StringName identifier for the system.
-## @return: The ECSSystem instance, or null if not found.
-func get_system(name: StringName) -> ECSSystem:
-	if not _system_pool.has(name):
-		return null
-	return _system_pool[name]
-
-## Returns all system names registered in this world.
-## @return: Array of StringName system identifiers.
-func get_system_keys() -> Array:
-	return _system_pool.keys()
-
-## Checks if a system with the given name exists.
-## @param name: The StringName identifier for the system.
-## @return: True if the system exists, false otherwise.
-func has_system(name: StringName) -> bool:
-	return _system_pool.has(name)
 
 # ==============================================================================
 # Public API - Event System
@@ -406,40 +310,6 @@ func send(e: GameEvent) -> void:
 	if debug_print and not ignore_notify_log.has(e.name):
 		print('send <%s> "%s", %s.' % [_name, e.name, e.data])
 	_event_pool.send(e)
-
-# ==============================================================================
-# Public API - Update Cycle
-# ==============================================================================
-
-## Triggers the update cycle, emitting the on_update signal to execute all connected systems.
-## @param delta: The time elapsed since the last frame in seconds.
-## @deprecated: Use ECSRunner.run() instead.
-func update(delta: float) -> void:
-	push_warning("[Deprecated] update() is deprecated. Use ECSRunner.run() instead.")
-	on_update.emit(delta)
-
-## Enables or disables a system's update callback.
-## @param name: The StringName identifier for the system.
-## @param enable: True to enable updates, false to disable.
-func set_system_update(name: StringName, enable: bool) -> void:
-	var system := get_system(name)
-	if system == null or not system.has_method("_on_update"):
-		return
-	if enable:
-		if not on_update.is_connected(system._on_update):
-			on_update.connect(system._on_update)
-	else:
-		if on_update.is_connected(system._on_update):
-			on_update.disconnect(system._on_update)
-
-## Checks if a system is currently connected to the update cycle.
-## @param name: The StringName identifier for the system.
-## @return: True if the system's update callback is connected.
-func is_system_updating(name: StringName) -> bool:
-	var system := get_system(name)
-	if system == null or not system.has_method("_on_update"):
-		return false
-	return on_update.is_connected(system._on_update)
 
 # ==============================================================================
 # Public API - Scheduler Management
@@ -551,19 +421,54 @@ func _get_type_list(name: StringName) -> Dictionary:
 		_type_component_dict[name] = {}
 	return _type_component_dict[name]
 
-## Internal: Gets a dictionary containing entity and specified components.
-## @param e: The ECSEntity to query.
-## @param names: Array of component names to retrieve.
-## @return: Dictionary with "entity" key and component entries.
-func _get_satisfy_components(e: ECSEntity, names: Array) -> Dictionary:
-	var result := {
-		"entity": e,
-	}
-	for c: ECSComponent in names.map(func(key: StringName):
-		return get_component(e.id(), key)
-	):
-		result.set(c.name(), c)
-	return result
+## Internal: Builds or fetches the cached query for a set of component classes.
+## @param keys: Array of component classes (GDScript) to query.
+## @return: QueryCache instance for the component combination, or null if keys is empty.
+func _multi_view_cache(keys: Array[GDScript]) -> QueryCache:
+	var pairs: Array = []
+	for key in keys:
+		var name := resolve_name(key)
+		if not name.is_empty():
+			pairs.append([name, key])
+	if pairs.is_empty():
+		return null
+	pairs.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+	var sorted_names: Array[StringName] = []
+	var sorted_scripts: Array[GDScript] = []
+	for pair in pairs:
+		sorted_names.append(pair[0])
+		sorted_scripts.append(pair[1])
+	var cache_key: String = ""
+	for i in sorted_names.size():
+		if i > 0:
+			cache_key += "_"
+		cache_key += sorted_names[i]
+	var cache: QueryCache
+	if _query_caches.has(cache_key):
+		cache = _query_caches[cache_key]
+	else:
+		cache = QueryCache.new(self, sorted_names, sorted_scripts)
+		_query_caches[cache_key] = cache
+	return cache
+
+## Internal: Removes a component by its canonical name and notifies caches/entity.
+## @param entity_id: The entity ID.
+## @param name: The component name.
+## @return: True if successful.
+func _remove_component_by_name(entity_id: int, name: StringName) -> bool:
+	if not has_entity(entity_id):
+		return false
+	var entity_dict: Dictionary = _entity_component_dict[entity_id]
+	var c: ECSComponent = entity_dict.get(name) as ECSComponent
+	if c == null or not _remove_entity_component(entity_id, name):
+		return false
+	for cache in _query_caches.values():
+		cache.on_component_changed(entity_id, name, false)
+	if debug_print:
+		print("component <%s:%s> remove from entity <%d>." % [_name, name, entity_id])
+	var entity: ECSEntity = c._entity
+	entity.on_component_removed.emit(entity, c)
+	return true
 
 ## Internal: Adds a component to an entity's component dictionary.
 ## @param entity_id: The entity ID.
@@ -591,11 +496,22 @@ func _remove_entity_component(entity_id: int, name: StringName) -> bool:
 	var entity_dict: Dictionary = _entity_component_dict[entity_id]
 	return entity_dict.erase(name)
 
+## Internal: Checks whether a script's inheritance chain includes ECSComponent.
+## @param script: The GDScript to check.
+## @return: True if the script is a (subclass of) ECSComponent.
+func _is_component_script(script: GDScript) -> bool:
+	var base: Script = script.get_base_script()
+	while base:
+		if base == ECSComponent:
+			return true
+		base = base.get_base_script()
+	return false
+
 ## Internal: Creates an entity wrapper and registers it in the world.
 ## @param eid: The entity ID.
 ## @return: The created ECSEntity wrapper.
 func _create_entity(eid: int) -> ECSEntity:
-	var e := _create_entity_callback.call(eid)
+	var e: ECSEntity = _create_entity_callback.call(eid)
 	_entity_pool[eid] = e
 	_entity_component_dict[eid] = {}
 	if debug_print:

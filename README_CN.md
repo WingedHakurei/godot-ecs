@@ -22,7 +22,7 @@
 ## 📦 安装
 
 1. 下载本仓库。
-2. 将 `GodotECS` 和 `GodotUtils` 文件夹复制到你的 Godot 项目的 `res://` 根目录下。
+2. 将 `addons/godot-ecs` 文件夹复制到你的 Godot 项目的 `res://addons/` 目录下。
 3. 完成！无需配置插件，直接在代码中引用。
 
 ## ⚡ 快速开始
@@ -41,23 +41,19 @@ func _ready() -> void:
     # 创建世界
     _world = ECSWorld.new("MyGameWorld")
 
-    # 创建执行器用于管理单线程系统（推荐方式）
+    # 创建执行器用于管理单线程系统
     _runner = _world.create_runner("GameLogic")
 
-    # 向执行器添加系统
-    _runner.add_system("MoveSystem", SysMovement.new())
+    # 向执行器添加系统（系统以类为键）
+    _runner.add_system(SysMovement.new())
 
-    # 创建一个实体
+    # 创建一个实体并添加组件
     var entity = _world.create_entity()
-    entity.add_component("Position", CompPos.new(0, 0))
-    entity.add_component("Velocity", CompVel.new(10, 0))
-
-# 旧方式（已弃用，仅供参考）：
-# _world.add_system("MoveSystem", SysMovement.new())
-# _world.update(delta)
+    entity.add(CompPos.new(0, 0))
+    entity.add(CompVel.new(10, 0))
 
 func _process(delta: float) -> void:
-    # 驱动执行器更新（推荐方式）
+    # 驱动执行器更新
     _runner.run(delta)
 
 func _exit_tree() -> void:
@@ -72,18 +68,18 @@ func _exit_tree() -> void:
 class CompPos extends ECSComponent:
     var x: float = 0
     var y: float = 0
-    func _init(px=0, py=0): x=px; y=py
+    func _init(px: float = 0, py: float = 0) -> void: x = px; y = py
 
-class CompVel extends ECSDataComponent:
-    # ECSDataComponent 自带一个 data 属性
-    pass
+class CompVel extends ECSComponent:
+    var data: float = 0
+    func _init(v: float = 0) -> void: data = v
 ```
 
 ### 3. 使用 ECSRunner（推荐）
 
 **ECSRunner** 是管理单线程系统的推荐方式。它提供系统分组、更好的组织结构，以及与 ECSScheduler 一致的 API 风格。
 
-> **注意**: 直接使用 `world.add_system()` 和 `world.update()` 的方法已被标记为**弃用**，但仍支持向后兼容。
+> **注意**: 旧版 `world.add_system()` 和 `world.update()` 方法已**移除**。所有单线程系统请使用 `ECSRunner`。
 
 ```gdscript
 extends Node
@@ -99,16 +95,16 @@ func _ready() -> void:
     _runner = _world.create_runner("GameLogic")
 
     # 向执行器添加系统（支持链式调用）
-    _runner.add_system("MoveSystem", SysMovement.new())
-           .add_system("RenderSystem", SysRender.new())
+    _runner.add_system(SysMovement.new())
+           .add_system(SysRender.new())
 
     # 创建一个实体
     var entity = _world.create_entity()
-    entity.add_component("Position", CompPos.new(0, 0))
-    entity.add_component("Velocity", CompVel.new(10, 0))
+    entity.add(CompPos.new(0, 0))
+    entity.add(CompVel.new(10, 0))
 
 func _process(delta: float) -> void:
-    # 驱动执行器更新（替代 world.update()）
+    # 驱动执行器更新
     _runner.run(delta)
 
 func _exit_tree() -> void:
@@ -133,11 +129,11 @@ func _exit_tree() -> void:
 class SysMovement extends ECSSystem:
     func _on_update(delta: float) -> void:
         # 获取所有拥有 Position 和 Velocity 的实体
-        var list = world().multi_view(["Position", "Velocity"])
+        var list: Array[Dictionary] = world().multi_view([CompPos, CompVel])
 
         for item in list:
-            var pos = item["Position"]
-            var vel = item["Velocity"]
+            var pos: CompPos = item[CompPos] as CompPos
+            var vel: CompVel = item[CompVel] as CompVel
             pos.x += vel.data * delta
 ```
 
@@ -147,21 +143,19 @@ class SysMovement extends ECSSystem:
 
 ```gdscript
 class SysPhysics extends ECSParallel:
-    func _init(): super._init("Physics")
-
     # 1. 声明读写权限，供调度器分析
-    func _list_components() -> Dictionary:
+    func _list_components() -> Dictionary[GDScript, int]:
         return {
-            "Position": ECSParallel.READ_WRITE,
-            "Velocity": ECSParallel.READ_ONLY
+            CompPos: ECSParallel.READ_WRITE,
+            CompVel: ECSParallel.READ_ONLY
         }
 
     # 2. 开启多线程并行处理
     func _parallel() -> bool: return true
 
     # 3. 业务逻辑 (传入线程安全的 CommandBuffer)
-    func _view_components(view: Dictionary, cmds: ECSParallel.Commands) -> void:
-        view["Position"].x += view["Velocity"].data * delta
+    func _view_components(view: Dictionary, cmds: Commands) -> void:
+        (view[CompPos] as CompPos).x += (view[CompVel] as CompVel).data * delta
 ```
 
 ## 🏗️ 架构概览
@@ -178,8 +172,8 @@ class SysPhysics extends ECSParallel:
 
 ### 目录结构
 
-* `GodotECS/`: 核心框架代码 (World, Entity, System, Scheduler).
-* `GodotUtils/`: 工具库 (EventCenter, Serialization, Factory).
+* `addons/godot-ecs/core/`: 核心框架代码 (World, Entity, System, Runner, Scheduler).
+* `addons/godot-ecs/utils/`: 工具库 (EventCenter, Serialization, Factory).
 
 ## 💾 序列化支持
 

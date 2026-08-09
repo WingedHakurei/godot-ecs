@@ -2,16 +2,18 @@ extends Node2D
 
 # create ecs world
 var _world := ECSWorld.new("SyncDemo")
+var _runner: ECSRunner
 	
 @onready var _score = $VBoxContainer/Scroe
 @onready var _time = $VBoxContainer/Time
 @onready var _tips = $VBoxContainer/Tips
 	
 func _enter_tree() -> void:
-	_world.add_system("game_system", preload("../system/game_system.gd").new(self))
+	_runner = _world.create_runner("main")
+	_runner.add_system(preload("../system/game_system.gd").new(self))
 	
 func _exit_tree() -> void:
-	_world.remove_system("game_system")
+	_world.destroy_runner("main")
 	
 func _ready() -> void:
 	_connect_components()
@@ -27,10 +29,10 @@ func _ready() -> void:
 	_world.notify("load_game_command")
 	
 func _process(delta: float) -> void:
-	_world.update(delta)
+	_runner.run(delta)
 	
 func _connect_components() -> void:
-	for c: MyComponent in _world.view("my_component"):
+	for c: MyComponent in _world.view(MyComponent):
 		c.on_score_changed.connect(_on_score_changed)
 		c.on_seconds_changed.connect(_on_seconds_changed)
 	

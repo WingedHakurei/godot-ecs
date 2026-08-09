@@ -74,8 +74,23 @@ func _assert(condition: bool, msg: String) -> void:
 # ==============================================================================
 
 # Define some test components
-class CompHealth extends ECSDataComponent: pass
-class CompMana extends ECSDataComponent: pass
+class CompHealth extends ECSComponent:
+	var data: int = 0
+	func _init(v: int = 0) -> void:
+		data = v
+	func _on_pack(ar: Serializer.Archive) -> void:
+		ar.set_var("data", data)
+	func _on_unpack(ar: Serializer.Archive) -> void:
+		data = ar.get_var("data", 0)
+
+class CompMana extends ECSComponent:
+	var data: int = 0
+	func _init(v: int = 0) -> void:
+		data = v
+	func _on_pack(ar: Serializer.Archive) -> void:
+		ar.set_var("data", data)
+	func _on_unpack(ar: Serializer.Archive) -> void:
+		data = ar.get_var("data", 0)
 class CompPos extends ECSComponent: 
 	var x: int = 0
 	var y: int = 0
@@ -103,6 +118,13 @@ class MockSystem extends ECSSystem:
 	func _on_update(delta: float) -> void:
 		update_count += 1
 
+# Distinct mock system classes (systems are keyed by class; one instance per class per runner)
+class MockSystemB extends MockSystem:
+	pass
+
+class MockSystemC extends MockSystem:
+	pass
+
 # Mock system without _on_update for edge case testing
 class SystemNoUpdate extends ECSSystem:
 	pass
@@ -118,25 +140,25 @@ func _test_entity_component_crud() -> void:
 	_assert(_world.has_entity(eid), "Entity should exist in world")
 	
 	# Add Components
-	e.add_component("Health", CompHealth.new(100))
-	e.add_component("Pos", CompPos.new())
+	e.add(CompHealth.new(100))
+	e.add(CompPos.new())
 	
-	_assert(e.has_component("Health"), "Entity should have Health")
-	_assert(e.has_component("Pos"), "Entity should have Pos")
-	_assert(not e.has_component("Mana"), "Entity should not have Mana")
+	_assert(e.has(CompHealth), "Entity should have Health")
+	_assert(e.has(CompPos), "Entity should have Pos")
+	_assert(not e.has(CompMana), "Entity should not have Mana")
 	
 	# Check Data
-	var hp = e.get_component("Health") as CompHealth
+	var hp: CompHealth = e.getc(CompHealth) as CompHealth
 	_assert(hp.data == 100, "Health data value check")
 	
 	# Update Data
-	hp.set_data(50)
-	_assert((e.get_component("Health") as CompHealth).data == 50, "Health data update check")
+	hp.data = 50
+	_assert((e.getc(CompHealth) as CompHealth).data == 50, "Health data update check")
 	
 	# Remove Component
-	e.remove_component("Health")
-	_assert(not e.has_component("Health"), "Health component should be removed")
-	_assert(e.has_component("Pos"), "Pos component should remain")
+	e.remove(CompHealth)
+	_assert(not e.has(CompHealth), "Health component should be removed")
+	_assert(e.has(CompPos), "Pos component should remain")
 	
 	# Destroy Entity
 	e.destroy()
@@ -146,41 +168,36 @@ func _test_entity_component_crud() -> void:
 func _test_entity_shorthand_methods() -> void:
 	var e = _world.create_entity()
 	
-	# Test shorthand has()
-	e.add_component("Health", CompHealth.new(100))
-	_assert(e.has("Health"), "Shorthand has() should return true")
-	_assert(e.has("Health") == e.has_component("Health"), "has() should match has_component()")
-	_assert(not e.has("Mana"), "Shorthand has() should return false for missing component")
+	# Test has()
+	e.add(CompHealth.new(100))
+	_assert(e.has(CompHealth), "has() should return true")
+	_assert(not e.has(CompMana), "has() should return false for missing component")
 	
-	# Test shorthand getc()
-	var hp = e.getc("Health")
-	_assert(hp != null, "Shorthand getc() should return component")
-	_assert(hp == e.get_component("Health"), "getc() should match get_component()")
-	_assert(e.getc("Mana") == null, "Shorthand getc() should return null for missing component")
-	_assert(hp.data == 100, "Shorthand getc() should return correct component data")
+	# Test getc()
+	var hp: CompHealth = e.getc(CompHealth) as CompHealth
+	_assert(hp != null, "getc() should return component")
+	_assert(e.getc(CompMana) == null, "getc() should return null for missing component")
+	_assert(hp.data == 100, "getc() should return correct component data")
 	
-	# Test shorthand getc_all()
-	e.add_component("Pos", CompPos.new())
-	var all_comps = e.getc_all()
-	_assert(all_comps.size() == 2, "Shorthand getc_all() should return 2 components")
-	_assert(all_comps == e.get_components(), "getc_all() should match get_components()")
+	# Test getc_all()
+	e.add(CompPos.new())
+	var all_comps := e.getc_all()
+	_assert(all_comps.size() == 2, "getc_all() should return 2 components")
 	
-	# Test shorthand remove()
-	var removed = e.remove("Health")
-	_assert(removed, "Shorthand remove() should return true")
-	_assert(not e.has("Health"), "Component should be removed after remove()")
-	_assert(removed == e.remove_component("Pos"), "remove() should match remove_component()")
+	# Test remove()
+	var removed := e.remove(CompHealth)
+	_assert(removed, "remove() should return true")
+	_assert(not e.has(CompHealth), "Component should be removed after remove()")
 	
-	var removed_twice = e.remove("Health")
-	_assert(not removed_twice, "Shorthand remove() should return false for missing component")
+	var removed_twice := e.remove(CompHealth)
+	_assert(not removed_twice, "remove() should return false for missing component")
 	
-	# Test shorthand remove_all()
-	e.add_component("Health", CompHealth.new(50))
-	e.add_component("Pos", CompPos.new())
-	var cleared = e.remove_all()
-	_assert(cleared, "Shorthand remove_all() should return true")
+	# Test remove_all()
+	e.add(CompHealth.new(50))
+	e.add(CompPos.new())
+	var cleared := e.remove_all()
+	_assert(cleared, "remove_all() should return true")
 	_assert(e.getc_all().is_empty(), "All components should be removed")
-	_assert(cleared == e.remove_all_components(), "remove_all() should match remove_all_components()")
 	
 	e.destroy()
 
@@ -192,76 +209,75 @@ func _test_query_system() -> void:
 	# E4: [Health]
 	
 	var e1 = _world.create_entity()
-	e1.add_component("Health", CompHealth.new(10)); e1.add_component("Pos", CompPos.new())
+	e1.add(CompHealth.new(10)); e1.add(CompPos.new())
 	
 	var e2 = _world.create_entity()
-	e2.add_component("Health", CompHealth.new(20)); e2.add_component("Mana", CompMana.new(20))
+	e2.add(CompHealth.new(20)); e2.add(CompMana.new(20))
 	
 	var e3 = _world.create_entity()
-	e3.add_component("Pos", CompPos.new()); e3.add_component("Mana", CompMana.new(30))
+	e3.add(CompPos.new()); e3.add(CompMana.new(30))
 	
 	var e4 = _world.create_entity()
-	e4.add_component("Health", CompHealth.new(40))
+	e4.add(CompHealth.new(40))
 	
 	# 1. Test View (Single Component)
-	var healths = _world.view("Health")
-	_assert(healths.size() == 3, "View('Health') should return 3 components")
+	var healths = _world.view(CompHealth)
+	_assert(healths.size() == 3, "View(CompHealth) should return 3 components")
 	
 	# 2. Test Multi View (AND logic - Cache check)
-	var health_pos = _world.multi_view(["Health", "Pos"])
-	_assert(health_pos.size() == 1, "MultiView(['Health', 'Pos']) should return 1 result (E1)")
+	var health_pos = _world.multi_view([CompHealth, CompPos])
+	_assert(health_pos.size() == 1, "MultiView([CompHealth, CompPos]) should return 1 result (E1)")
 	if not health_pos.is_empty():
 		_assert(health_pos[0].entity.id() == e1.id(), "MultiView result validation")
 		
 	# 3. Test Complex Query (With + Without)
 	# Find entities with Health but WITHOUT Pos -> E2, E4
-	var res_without = _world.query().with(["Health"]).without(["Pos"]).exec()
-	_assert(res_without.size() == 2, "Query With(Health) Without(Pos) count check")
+	var res_without = _world.query().with([CompHealth]).without([CompPos]).exec()
+	_assert(res_without.size() == 2, "Query With(CompHealth) Without(CompPos) count check")
 	
 	# 4. Test AnyOf (OR logic)
 	# Find entities with Pos OR Mana -> E1, E2, E3
-	var res_any = _world.query().any_of(["Pos", "Mana"]).exec()
-	_assert(res_any.size() == 3, "Query AnyOf(Pos, Mana) count check")
+	var res_any = _world.query().any_of([CompPos, CompMana]).exec()
+	_assert(res_any.size() == 3, "Query AnyOf(CompPos, CompMana) count check")
 	
 	# 5. Test Filter
 	# Find Health > 15 -> E2 (20), E4 (40)
-	var res_filter = _world.query().with(["Health"]).filter(func(data):
-		return data["Health"].data > 15
+	var res_filter = _world.query().with([CompHealth]).filter(func(data):
+		return data[CompHealth].data > 15
 	).exec()
 	_assert(res_filter.size() == 2, "Query Filter check")
 
 func _test_query_cache_reactive() -> void:
 	# --- 1. Initialize environment ---
 	var e = _world.create_entity()
-	e.add_component("Health", CompHealth.new(10))
+	e.add(CompHealth.new(10))
 	# At this point e only has Health
 
 	# --- 2. Build cache (Cache Miss -> Build) ---
 	# We query entities with both [Health, Pos]
 	# Result should be empty at this point
-	var cache_view = _world.multi_view(["Health", "Pos"])
+	var cache_view = _world.multi_view([CompHealth, CompPos])
 	_assert(cache_view.is_empty(), "Cache should be empty initially")
 
 	# --- 3. Test: Dynamic component addition (Add -> Cache Update) ---
 	# Add Pos to e so it satisfies [Health, Pos] condition
-	e.add_component("Pos", CompPos.new())
+	e.add(CompPos.new())
 
-	# Get cache result again (note: multi_view returns same Array reference)
-	# Key point: We should NOT recreate query, check if previous view updated
-	var cache_view_after_add = _world.multi_view(["Health", "Pos"])
+	# Get cache result again (multi_view returns the cache's live array)
+	var cache_view_after_add = _world.multi_view([CompHealth, CompPos])
 
 	_assert(cache_view_after_add.size() == 1, "Cache should update after adding component")
 	_assert(cache_view_after_add[0].entity.id() == e.id(), "Entity should appear in cache")
 
 	# --- 4. Test: Dynamic component removal (Remove -> Cache Update) ---
 	# Remove Pos, e no longer satisfies condition
-	e.remove_component("Pos")
+	e.remove(CompPos)
 
 	_assert(cache_view_after_add.is_empty(), "Cache should clear after removing component")
 
 	# --- 5. Test: Entity destruction (Destroy -> Cache Update) ---
 	# Add it back first so it enters cache again
-	e.add_component("Pos", CompPos.new())
+	e.add(CompPos.new())
 	_assert(cache_view_after_add.size() == 1, "Entity re-added")
 
 	# Destroy entity
@@ -297,27 +313,27 @@ func _test_commands() -> void:
 	
 	# Queue operations
 	cmds.spawn()\
-		.add_component("Health", CompHealth.new(999))
+		.add_component(CompHealth.new(999))
 	
 	var e = _world.create_entity()
 	var eid = e.id()
-	cmds.entity(eid).add_component("Pos", CompPos.new())
+	cmds.entity(eid).add_component(CompPos.new())
 	
 	_assert(_world.get_entity_keys().size() == 1, "Before flush: Only 1 entity exists")
-	_assert(not e.has_component("Pos"), "Before flush: Pos not added yet")
+	_assert(not e.has(CompPos), "Before flush: Pos not added yet")
 	
 	# Execute
 	cmds.flush(_world)
 	
 	# Verify
 	_assert(_world.get_entity_keys().size() == 2, "After flush: 2 entities exist")
-	_assert(e.has_component("Pos"), "After flush: Pos added")
+	_assert(e.has(CompPos), "After flush: Pos added")
 	
 	var entities = _world.get_entity_keys()
 	var new_entity_found = false
 	for id in entities:
 		if id != eid:
-			if _world.has_component(id, "Health"):
+			if _world.has_component(id, CompHealth):
 				new_entity_found = true
 	_assert(new_entity_found, "After flush: Spawned entity has Health")
 
@@ -376,27 +392,25 @@ func _test_commands_defer() -> void:
 # --- Scheduler Mock Systems ---
 # Simulate a system that produces data
 class SysProducer extends ECSParallel:
-	func _init(): super._init("Producer")
-	func _list_components() -> Dictionary:
-		return {"Val": ECSParallel.READ_WRITE}
+	func _list_components() -> Dictionary[GDScript, int]:
+		return {CompHealth: ECSParallel.READ_WRITE}
 	func _view_components(view: Dictionary, cmds: ECSSchedulerCommands) -> void:
-		# Add 1 to all entities with Val component
-		var c = view["Val"] as ECSDataComponent
+		# Add 1 to all entities with the Health component
+		var c: CompHealth = view[CompHealth] as CompHealth
 		c.data += 1
 
 # Simulate a system that consumes data, must run after Producer
 class SysConsumer extends ECSParallel:
-	var total_sum = 0
-	func _init(): super._init("Consumer")
-	func _list_components() -> Dictionary:
-		return {"Val": ECSParallel.READ_ONLY}
+	var total_sum: int = 0
+	func _list_components() -> Dictionary[GDScript, int]:
+		return {CompHealth: ECSParallel.READ_ONLY}
 	func _parallel() -> bool: return false # Set to single-threaded for easier accumulation testing
 	func thread_function(delta: float) -> void:
 		total_sum = 0 # Reset per frame
 		super.thread_function(delta)
 		
 	func _view_components(view: Dictionary, cmds: ECSSchedulerCommands) -> void:
-		var c = view["Val"] as ECSDataComponent
+		var c: CompHealth = view[CompHealth] as CompHealth
 		total_sum += c.data
 
 func _test_scheduler_dependency() -> void:
@@ -405,14 +419,14 @@ func _test_scheduler_dependency() -> void:
 	# Setup entities
 	for i in range(10):
 		var e = _world.create_entity()
-		e.add_component("Val", CompHealth.new(0)) # Reuse Health as general data wrapper
+		e.add(CompHealth.new(0))
 	
 	# Setup Systems
 	var sys_prod = SysProducer.new()
 	var sys_cons = SysConsumer.new()
 	
 	# Set dependency: Consumer must run after Producer
-	sys_cons.after(["Producer"])
+	sys_cons.after([SysProducer])
 	
 	scheduler.add_systems([sys_prod, sys_cons])
 	scheduler.build()
@@ -437,8 +451,8 @@ func _test_serialization() -> void:
 	var pos = CompPos.new()
 	pos.x = 100
 	pos.y = 200
-	e1.add_component("Pos", pos)
-	e1.add_component("Health", CompHealth.new(50))
+	e1.add(pos)
+	e1.add(CompHealth.new(50))
 	
 	# 2. Pack
 	var packer = ECSWorldPacker.new(_world)
@@ -461,18 +475,18 @@ func _test_serialization() -> void:
 	_assert(keys.size() == 1, "Entity restored count")
 	
 	if keys.size() > 0:
-		var eid = keys[0]
+		var eid: int = keys[0]
 		var e_restored = _world.get_entity(eid)
 		
-		_assert(e_restored.has_component("Pos"), "Component Pos restored")
-		_assert(e_restored.has_component("Health"), "Component Health restored")
+		_assert(e_restored.has(CompPos), "Component Pos restored")
+		_assert(e_restored.has(CompHealth), "Component Health restored")
 		
-		if e_restored.has_component("Pos"):
-			var p = e_restored.get_component("Pos") as CompPos
+		if e_restored.has(CompPos):
+			var p: CompPos = e_restored.getc(CompPos) as CompPos
 			_assert(p.x == 100 and p.y == 200, "Component custom data restored correct")
 			
-		if e_restored.has_component("Health"):
-			var h = e_restored.get_component("Health") as CompHealth
+		if e_restored.has(CompHealth):
+			var h: CompHealth = e_restored.getc(CompHealth) as CompHealth
 			_assert(h.data == 50, "Component standard data restored correct")
 
 func _test_runner_system_management() -> void:
@@ -480,28 +494,28 @@ func _test_runner_system_management() -> void:
 	
 	# Test: Add single system
 	var sys1 = MockSystem.new()
-	runner.add_system("Sys1", sys1)
-	_assert(runner.get_system("Sys1") == sys1, "Add single system - system retrieved correctly")
+	runner.add_system(sys1)
+	_assert(runner.get_system(sys1.get_script() as GDScript) == sys1, "Add single system - system retrieved correctly")
 	_assert(runner.get_systems().size() == 1, "Add single system - count correct")
 	
 	# Test: Add multiple systems
-	var sys2 = MockSystem.new()
-	var sys3 = MockSystem.new()
-	runner.add_systems({"Sys2": sys2, "Sys3": sys3})
+	var sys2 = MockSystemB.new()
+	var sys3 = MockSystemC.new()
+	runner.add_systems([sys2, sys3])
 	_assert(runner.get_systems().size() == 3, "Add multiple systems - count correct")
-	_assert(runner.get_system("Sys2") == sys2, "Add multiple systems - Sys2 retrieved")
-	_assert(runner.get_system("Sys3") == sys3, "Add multiple systems - Sys3 retrieved")
+	_assert(runner.get_system(sys2.get_script() as GDScript) == sys2, "Add multiple systems - Sys2 retrieved")
+	_assert(runner.get_system(sys3.get_script() as GDScript) == sys3, "Add multiple systems - Sys3 retrieved")
 	
-	# Test: Replace system with same name
+	# Test: Replace system with same class
 	var sys1_new = MockSystem.new()
-	runner.add_system("Sys1", sys1_new)
-	_assert(runner.get_system("Sys1") == sys1_new, "Replace system - new system retrieved")
+	runner.add_system(sys1_new)
+	_assert(runner.get_system(sys1.get_script() as GDScript) == sys1_new, "Replace system - new system retrieved")
 	_assert(sys1.exit_called, "Replace system - old system exit called")
 	_assert(sys1_new.enter_called, "Replace system - new system enter called")
 	
 	# Test: Remove system
-	runner.remove_system("Sys2")
-	_assert(runner.get_system("Sys2") == null, "Remove system - system is null")
+	runner.remove_system(sys2.get_script() as GDScript)
+	_assert(runner.get_system(sys2.get_script() as GDScript) == null, "Remove system - system is null")
 	_assert(runner.get_systems().size() == 2, "Remove system - count reduced")
 	_assert(sys2.exit_called, "Remove system - exit called")
 	
@@ -518,24 +532,24 @@ func _test_runner_update_control() -> void:
 	
 	# Test: Run one frame
 	var sys1 = MockSystem.new()
-	var sys2 = MockSystem.new()
-	runner.add_systems({"Sys1": sys1, "Sys2": sys2})
+	var sys2 = MockSystemB.new()
+	runner.add_systems([sys1, sys2])
 	runner.run(0.016)
 	_assert(sys1.update_count == 1, "Run frame - Sys1 update called once")
 	_assert(sys2.update_count == 1, "Run frame - Sys2 update called once")
 	
 	# Test: Disable single system
-	runner.set_system_update("Sys1", false)
-	_assert(not runner.is_system_updating("Sys1"), "Disable system - is_system_updating returns false")
-	_assert(runner.is_system_updating("Sys2"), "Disable system - other system still updating")
+	runner.set_system_update(sys1.get_script() as GDScript, false)
+	_assert(not runner.is_system_updating(sys1.get_script() as GDScript), "Disable system - is_system_updating returns false")
+	_assert(runner.is_system_updating(sys2.get_script() as GDScript), "Disable system - other system still updating")
 	
 	runner.run(0.016)
 	_assert(sys1.update_count == 1, "Disable system - Sys1 not updated")
 	_assert(sys2.update_count == 2, "Disable system - Sys2 updated")
 	
 	# Test: Enable system again
-	runner.set_system_update("Sys1", true)
-	_assert(runner.is_system_updating("Sys1"), "Enable system - is_system_updating returns true")
+	runner.set_system_update(sys1.get_script() as GDScript, true)
+	_assert(runner.is_system_updating(sys1.get_script() as GDScript), "Enable system - is_system_updating returns true")
 	
 	runner.run(0.016)
 	_assert(sys1.update_count == 2, "Enable system - Sys1 updated again")
@@ -543,8 +557,8 @@ func _test_runner_update_control() -> void:
 	
 	# Test: Disable all systems
 	runner.set_systems_update(false)
-	_assert(not runner.is_system_updating("Sys1"), "Disable all - Sys1 not updating")
-	_assert(not runner.is_system_updating("Sys2"), "Disable all - Sys2 not updating")
+	_assert(not runner.is_system_updating(sys1.get_script() as GDScript), "Disable all - Sys1 not updating")
+	_assert(not runner.is_system_updating(sys2.get_script() as GDScript), "Disable all - Sys2 not updating")
 	
 	runner.run(0.016)
 	_assert(sys1.update_count == 2, "Disable all - Sys1 not updated")
@@ -552,8 +566,8 @@ func _test_runner_update_control() -> void:
 	
 	# Test: Enable all systems
 	runner.set_systems_update(true)
-	_assert(runner.is_system_updating("Sys1"), "Enable all - Sys1 updating")
-	_assert(runner.is_system_updating("Sys2"), "Enable all - Sys2 updating")
+	_assert(runner.is_system_updating(sys1.get_script() as GDScript), "Enable all - Sys1 updating")
+	_assert(runner.is_system_updating(sys2.get_script() as GDScript), "Enable all - Sys2 updating")
 	
 	runner.run(0.016)
 	_assert(sys1.update_count == 3, "Enable all - Sys1 updated")
@@ -567,18 +581,18 @@ func _test_runner_lifecycle() -> void:
 	# Test: _on_enter is called when adding system
 	var sys = MockSystem.new()
 	_assert(not sys.enter_called, "Before add - enter not called")
-	runner.add_system("TestSys", sys)
+	runner.add_system(sys)
 	_assert(sys.enter_called, "After add - enter called")
 	
 	# Test: System name and world reference are set
-	_assert(sys.name() == "TestSys", "System name set correctly")
+	_assert(not sys.name().is_empty(), "System name derived from class")
 	_assert(sys.world() == _world, "System world reference set correctly")
 	
 	# Test: _on_exit is called when removing system
-	var sys2 = MockSystem.new()
-	runner.add_system("TestSys2", sys2)
+	var sys2 = MockSystemB.new()
+	runner.add_system(sys2)
 	_assert(not sys2.exit_called, "Before remove - exit not called")
-	runner.remove_system("TestSys2")
+	runner.remove_system(sys2.get_script() as GDScript)
 	_assert(sys2.exit_called, "After remove - exit called")
 	
 	_world.destroy_runner("TestRunner")
@@ -587,27 +601,27 @@ func _test_runner_edge_cases() -> void:
 	var runner = _world.create_runner("TestRunner")
 	
 	# Test: Remove non-existent system
-	var result = runner.remove_system("NonExistent")
+	var result = runner.remove_system(MockSystemC)
 	_assert(not result, "Remove non-existent system returns false")
 	
 	# Test: Get non-existent system
-	var sys = runner.get_system("NonExistent")
+	var sys = runner.get_system(MockSystemC)
 	_assert(sys == null, "Get non-existent system returns null")
 	
 	# Test: Enable/disable non-existent system (should not crash)
-	runner.set_system_update("NonExistent", true)
-	runner.set_system_update("NonExistent", false)
+	runner.set_system_update(MockSystemC, true)
+	runner.set_system_update(MockSystemC, false)
 	_assert(true, "Enable/disable non-existent system does not crash")
 	
 	# Test: Check update status of non-existent system
-	var updating = runner.is_system_updating("NonExistent")
+	var updating = runner.is_system_updating(MockSystemC)
 	_assert(not updating, "is_system_updating for non-existent returns false")
 	
-	# Test: System without _on_update method
+	# Test: System without _on_update override (base no-op is connected, running does not crash)
 	var sys_no_update = SystemNoUpdate.new()
-	runner.add_system("NoUpdate", sys_no_update)
-	_assert(runner.is_system_updating("NoUpdate") == false, "System without _on_update not connected")
-	runner.run(0.016) # Should not crash
+	runner.add_system(sys_no_update)
+	_assert(runner.is_system_updating(SystemNoUpdate), "System connected via base _on_update no-op")
+	runner.run(0.016)
 	_assert(true, "Running with system without _on_update does not crash")
 	
 	_world.destroy_runner("TestRunner")
@@ -616,9 +630,9 @@ func _test_type_index() -> void:
 	var e = _world.create_entity()
 	
 	e.add(CompHealth.new(0))
-	_assert(e.has_component(CompHealth), "Entity should have CompHealth type")
+	_assert(e.has(CompHealth), "Entity should have CompHealth type")
 	
-	var hp = e.get_component(CompHealth)
+	var hp = e.getc(CompHealth)
 	_assert(hp != null, "Get component by type should return instance")
 	_assert(hp.data == 0, "Default data value check")
 	
@@ -634,7 +648,7 @@ func _test_type_index() -> void:
 	
 	var cmds = ECSSchedulerCommands.new()
 	cmds.entity(e.id()).add_component(CompPos.new())
-	_assert(not e.has_component(CompPos), "Before flush: Component not added")
+	_assert(not e.has(CompPos), "Before flush: Component not added")
 	
 	cmds.flush(_world)
-	_assert(e.has_component(CompPos), "After flush: Component added via command buffer")
+	_assert(e.has(CompPos), "After flush: Component added via command buffer")

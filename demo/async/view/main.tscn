@@ -1,6 +1,21 @@
-[gd_scene load_steps=2 format=3 uid="uid://c3u7n5w6o0k02"]
+[gd_scene format=3 uid="uid://c3u7n5w6o0k02"]
 
 [ext_resource type="Script" uid="uid://dt648rx8jag51" path="res://demo/async/view/main.gd" id="1_22n1o"]
 
-[node name="Main" type="Node2D"]
+[node name="Main" type="Node2D" unique_id=2019910307]
 script = ExtResource("1_22n1o")
+
+[node name="StatusLabel" type="Label" parent="." unique_id=350515777]
+offset_left = 20.0
+offset_top = 20.0
+theme_override_font_sizes/font_size = 20
+text = "Loading..."
+
+[node name="StepButton" type="Button" parent="." unique_id=411672318]
+offset_left = 20.0
+offset_top = 200.0
+offset_right = 260.0
+offset_bottom = 245.0
+text = "Step (Run One Frame)"
+
+[connection signal="pressed" from="StepButton" to="." method="_step"]
