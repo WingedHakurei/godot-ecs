@@ -33,8 +33,8 @@ func _ready() -> void:
 	_scheduler = _world.get_scheduler("demo")
 	if _scheduler == null:
 		_scheduler = _world.create_scheduler("demo").add_systems([
-			LightWorkSystem.new(&"light_system").before([&"heavy_system"]),
-			HeavyWorkSystem.new(&"heavy_system"),
+			LightWorkSystem.new().before([HeavyWorkSystem]),
+			HeavyWorkSystem.new(),
 		]).build()
 	
 func _process(delta: float) -> void:
