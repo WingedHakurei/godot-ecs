@@ -4,18 +4,24 @@ class_name ECSSchedulerStressTest
 # ==============================================================================
 # Helper: Strict System for Testing
 # ==============================================================================
+
+class Comp1 extends ECSComponent: pass
+class CompData extends ECSComponent: pass
+class CompShared extends ECSComponent: pass
+class CompDummy extends ECSComponent: pass
+
 class StrictSystem extends ECSParallel:
-	var _read_list: Array[StringName] = []
-	var _write_list: Array[StringName] = []
+	var _read_list: Array[GDScript] = []
+	var _write_list: Array[GDScript] = []
 	
-	func _init(n: StringName, reads: Array = [], writes: Array = []):
+	func _init(n: StringName, reads: Array[GDScript] = [], writes: Array[GDScript] = []):
 		super._init(n)
 		_read_list.assign(reads)
 		_write_list.assign(writes)
 	
 	# Override: Define Resource Access
-	func _list_components() -> Dictionary:
-		var dict = {}
+	func _list_components() -> Dictionary[GDScript, int]:
+		var dict: Dictionary[GDScript, int] = {}
 		for r in _read_list: dict[r] = ECSParallel.READ_ONLY
 		for w in _write_list: dict[w] = ECSParallel.READ_WRITE
 		return dict
@@ -83,10 +89,10 @@ func _test_resource_conflict_serialization() -> void:
 	# SysC: Read [Comp1]  -> Conflict with A or B (RW)
 	# SysD: Read [Comp1]  -> Compatible with C (RR)
 	
-	var sys_a = StrictSystem.new("A", [], ["Comp1"])
-	var sys_b = StrictSystem.new("B", [], ["Comp1"])
-	var sys_c = StrictSystem.new("C", ["Comp1"], [])
-	var sys_d = StrictSystem.new("D", ["Comp1"], [])
+	var sys_a = StrictSystem.new("A", [], [Comp1])
+	var sys_b = StrictSystem.new("B", [], [Comp1])
+	var sys_c = StrictSystem.new("C", [Comp1], [])
+	var sys_d = StrictSystem.new("D", [Comp1], [])
 	
 	# 注意：我们故意不设置 before/after，完全依赖调度器的资源分析
 	scheduler.add_systems([sys_a, sys_b, sys_c, sys_d])
@@ -129,10 +135,10 @@ func _test_diamond_dependency() -> void:
 	#     \     /
 	#      End
 	
-	var s_start = StrictSystem.new("Start", [], ["Data"])
-	var s_left = StrictSystem.new("Left", ["Data"], [])
-	var s_right = StrictSystem.new("Right", ["Data"], [])
-	var s_end = StrictSystem.new("End", [], ["Data"])
+	var s_start = StrictSystem.new("Start", [], [CompData])
+	var s_left = StrictSystem.new("Left", [CompData], [])
+	var s_right = StrictSystem.new("Right", [CompData], [])
+	var s_end = StrictSystem.new("End", [], [CompData])
 	
 	# 设置显式依赖
 	s_left.after(["Start"])
@@ -175,7 +181,7 @@ func _test_massive_chain_and_width() -> void:
 	# 奇数索引全部依赖于 System 0: 0 -> 1, 0 -> 3, ... (宽依赖)
 	
 	for i in range(count):
-		var sys = StrictSystem.new("Sys_%d" % i, ["SharedComp"], [])
+		var sys = StrictSystem.new("Sys_%d" % i, [CompShared], [])
 		systems.append(sys)
 	
 	for i in range(count):
@@ -225,8 +231,8 @@ func _test_cyclic_dependency() -> void:
 	
 	var scheduler = _world.create_scheduler("Cyclic")
 	
-	var sys_a = StrictSystem.new("A", ["DummyComp"])
-	var sys_b = StrictSystem.new("B", ["DummyComp"])
+	var sys_a = StrictSystem.new("A", [CompDummy])
+	var sys_b = StrictSystem.new("B", [CompDummy])
 	
 	sys_b.after(["A"])
 	sys_a.after(["B"]) # Cycle!

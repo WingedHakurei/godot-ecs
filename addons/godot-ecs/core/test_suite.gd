@@ -133,25 +133,25 @@ func _test_entity_component_crud() -> void:
 	_assert(_world.has_entity(eid), "Entity should exist in world")
 	
 	# Add Components
-	e.add_component("Health", CompHealth.new(100))
-	e.add_component("Pos", CompPos.new())
+	e.add(CompHealth.new(100))
+	e.add(CompPos.new())
 	
-	_assert(e.has_component("Health"), "Entity should have Health")
-	_assert(e.has_component("Pos"), "Entity should have Pos")
-	_assert(not e.has_component("Mana"), "Entity should not have Mana")
+	_assert(e.has(CompHealth), "Entity should have Health")
+	_assert(e.has(CompPos), "Entity should have Pos")
+	_assert(not e.has(CompMana), "Entity should not have Mana")
 	
 	# Check Data
-	var hp = e.get_component("Health") as CompHealth
+	var hp: CompHealth = e.getc(CompHealth) as CompHealth
 	_assert(hp.data == 100, "Health data value check")
 	
 	# Update Data
 	hp.data = 50
-	_assert((e.get_component("Health") as CompHealth).data == 50, "Health data update check")
+	_assert((e.getc(CompHealth) as CompHealth).data == 50, "Health data update check")
 	
 	# Remove Component
-	e.remove_component("Health")
-	_assert(not e.has_component("Health"), "Health component should be removed")
-	_assert(e.has_component("Pos"), "Pos component should remain")
+	e.remove(CompHealth)
+	_assert(not e.has(CompHealth), "Health component should be removed")
+	_assert(e.has(CompPos), "Pos component should remain")
 	
 	# Destroy Entity
 	e.destroy()
@@ -161,41 +161,36 @@ func _test_entity_component_crud() -> void:
 func _test_entity_shorthand_methods() -> void:
 	var e = _world.create_entity()
 	
-	# Test shorthand has()
-	e.add_component("Health", CompHealth.new(100))
-	_assert(e.has("Health"), "Shorthand has() should return true")
-	_assert(e.has("Health") == e.has_component("Health"), "has() should match has_component()")
-	_assert(not e.has("Mana"), "Shorthand has() should return false for missing component")
+	# Test has()
+	e.add(CompHealth.new(100))
+	_assert(e.has(CompHealth), "has() should return true")
+	_assert(not e.has(CompMana), "has() should return false for missing component")
 	
-	# Test shorthand getc()
-	var hp = e.getc("Health")
-	_assert(hp != null, "Shorthand getc() should return component")
-	_assert(hp == e.get_component("Health"), "getc() should match get_component()")
-	_assert(e.getc("Mana") == null, "Shorthand getc() should return null for missing component")
-	_assert(hp.data == 100, "Shorthand getc() should return correct component data")
+	# Test getc()
+	var hp: CompHealth = e.getc(CompHealth) as CompHealth
+	_assert(hp != null, "getc() should return component")
+	_assert(e.getc(CompMana) == null, "getc() should return null for missing component")
+	_assert(hp.data == 100, "getc() should return correct component data")
 	
-	# Test shorthand getc_all()
-	e.add_component("Pos", CompPos.new())
-	var all_comps = e.getc_all()
-	_assert(all_comps.size() == 2, "Shorthand getc_all() should return 2 components")
-	_assert(all_comps == e.get_components(), "getc_all() should match get_components()")
+	# Test getc_all()
+	e.add(CompPos.new())
+	var all_comps := e.getc_all()
+	_assert(all_comps.size() == 2, "getc_all() should return 2 components")
 	
-	# Test shorthand remove()
-	var removed = e.remove("Health")
-	_assert(removed, "Shorthand remove() should return true")
-	_assert(not e.has("Health"), "Component should be removed after remove()")
-	_assert(removed == e.remove_component("Pos"), "remove() should match remove_component()")
+	# Test remove()
+	var removed := e.remove(CompHealth)
+	_assert(removed, "remove() should return true")
+	_assert(not e.has(CompHealth), "Component should be removed after remove()")
 	
-	var removed_twice = e.remove("Health")
-	_assert(not removed_twice, "Shorthand remove() should return false for missing component")
+	var removed_twice := e.remove(CompHealth)
+	_assert(not removed_twice, "remove() should return false for missing component")
 	
-	# Test shorthand remove_all()
-	e.add_component("Health", CompHealth.new(50))
-	e.add_component("Pos", CompPos.new())
-	var cleared = e.remove_all()
-	_assert(cleared, "Shorthand remove_all() should return true")
+	# Test remove_all()
+	e.add(CompHealth.new(50))
+	e.add(CompPos.new())
+	var cleared := e.remove_all()
+	_assert(cleared, "remove_all() should return true")
 	_assert(e.getc_all().is_empty(), "All components should be removed")
-	_assert(cleared == e.remove_all_components(), "remove_all() should match remove_all_components()")
 	
 	e.destroy()
 
@@ -207,76 +202,75 @@ func _test_query_system() -> void:
 	# E4: [Health]
 	
 	var e1 = _world.create_entity()
-	e1.add_component("Health", CompHealth.new(10)); e1.add_component("Pos", CompPos.new())
+	e1.add(CompHealth.new(10)); e1.add(CompPos.new())
 	
 	var e2 = _world.create_entity()
-	e2.add_component("Health", CompHealth.new(20)); e2.add_component("Mana", CompMana.new(20))
+	e2.add(CompHealth.new(20)); e2.add(CompMana.new(20))
 	
 	var e3 = _world.create_entity()
-	e3.add_component("Pos", CompPos.new()); e3.add_component("Mana", CompMana.new(30))
+	e3.add(CompPos.new()); e3.add(CompMana.new(30))
 	
 	var e4 = _world.create_entity()
-	e4.add_component("Health", CompHealth.new(40))
+	e4.add(CompHealth.new(40))
 	
 	# 1. Test View (Single Component)
-	var healths = _world.view("Health")
-	_assert(healths.size() == 3, "View('Health') should return 3 components")
+	var healths = _world.view(CompHealth)
+	_assert(healths.size() == 3, "View(CompHealth) should return 3 components")
 	
 	# 2. Test Multi View (AND logic - Cache check)
-	var health_pos = _world.multi_view(["Health", "Pos"])
-	_assert(health_pos.size() == 1, "MultiView(['Health', 'Pos']) should return 1 result (E1)")
+	var health_pos = _world.multi_view([CompHealth, CompPos])
+	_assert(health_pos.size() == 1, "MultiView([CompHealth, CompPos]) should return 1 result (E1)")
 	if not health_pos.is_empty():
 		_assert(health_pos[0].entity.id() == e1.id(), "MultiView result validation")
 		
 	# 3. Test Complex Query (With + Without)
 	# Find entities with Health but WITHOUT Pos -> E2, E4
-	var res_without = _world.query().with(["Health"]).without(["Pos"]).exec()
-	_assert(res_without.size() == 2, "Query With(Health) Without(Pos) count check")
+	var res_without = _world.query().with([CompHealth]).without([CompPos]).exec()
+	_assert(res_without.size() == 2, "Query With(CompHealth) Without(CompPos) count check")
 	
 	# 4. Test AnyOf (OR logic)
 	# Find entities with Pos OR Mana -> E1, E2, E3
-	var res_any = _world.query().any_of(["Pos", "Mana"]).exec()
-	_assert(res_any.size() == 3, "Query AnyOf(Pos, Mana) count check")
+	var res_any = _world.query().any_of([CompPos, CompMana]).exec()
+	_assert(res_any.size() == 3, "Query AnyOf(CompPos, CompMana) count check")
 	
 	# 5. Test Filter
 	# Find Health > 15 -> E2 (20), E4 (40)
-	var res_filter = _world.query().with(["Health"]).filter(func(data):
-		return data["Health"].data > 15
+	var res_filter = _world.query().with([CompHealth]).filter(func(data):
+		return data[CompHealth].data > 15
 	).exec()
 	_assert(res_filter.size() == 2, "Query Filter check")
 
 func _test_query_cache_reactive() -> void:
 	# --- 1. Initialize environment ---
 	var e = _world.create_entity()
-	e.add_component("Health", CompHealth.new(10))
+	e.add(CompHealth.new(10))
 	# At this point e only has Health
 
 	# --- 2. Build cache (Cache Miss -> Build) ---
 	# We query entities with both [Health, Pos]
 	# Result should be empty at this point
-	var cache_view = _world.multi_view(["Health", "Pos"])
+	var cache_view = _world.multi_view([CompHealth, CompPos])
 	_assert(cache_view.is_empty(), "Cache should be empty initially")
 
 	# --- 3. Test: Dynamic component addition (Add -> Cache Update) ---
 	# Add Pos to e so it satisfies [Health, Pos] condition
-	e.add_component("Pos", CompPos.new())
+	e.add(CompPos.new())
 
-	# Get cache result again (note: multi_view returns same Array reference)
-	# Key point: We should NOT recreate query, check if previous view updated
-	var cache_view_after_add = _world.multi_view(["Health", "Pos"])
+	# Get cache result again (multi_view returns the cache's live array)
+	var cache_view_after_add = _world.multi_view([CompHealth, CompPos])
 
 	_assert(cache_view_after_add.size() == 1, "Cache should update after adding component")
 	_assert(cache_view_after_add[0].entity.id() == e.id(), "Entity should appear in cache")
 
 	# --- 4. Test: Dynamic component removal (Remove -> Cache Update) ---
 	# Remove Pos, e no longer satisfies condition
-	e.remove_component("Pos")
+	e.remove(CompPos)
 
 	_assert(cache_view_after_add.is_empty(), "Cache should clear after removing component")
 
 	# --- 5. Test: Entity destruction (Destroy -> Cache Update) ---
 	# Add it back first so it enters cache again
-	e.add_component("Pos", CompPos.new())
+	e.add(CompPos.new())
 	_assert(cache_view_after_add.size() == 1, "Entity re-added")
 
 	# Destroy entity
@@ -312,27 +306,27 @@ func _test_commands() -> void:
 	
 	# Queue operations
 	cmds.spawn()\
-		.add_component("Health", CompHealth.new(999))
+		.add_component(CompHealth.new(999))
 	
 	var e = _world.create_entity()
 	var eid = e.id()
-	cmds.entity(eid).add_component("Pos", CompPos.new())
+	cmds.entity(eid).add_component(CompPos.new())
 	
 	_assert(_world.get_entity_keys().size() == 1, "Before flush: Only 1 entity exists")
-	_assert(not e.has_component("Pos"), "Before flush: Pos not added yet")
+	_assert(not e.has(CompPos), "Before flush: Pos not added yet")
 	
 	# Execute
 	cmds.flush(_world)
 	
 	# Verify
 	_assert(_world.get_entity_keys().size() == 2, "After flush: 2 entities exist")
-	_assert(e.has_component("Pos"), "After flush: Pos added")
+	_assert(e.has(CompPos), "After flush: Pos added")
 	
 	var entities = _world.get_entity_keys()
 	var new_entity_found = false
 	for id in entities:
 		if id != eid:
-			if _world.has_component(id, "Health"):
+			if _world.has_component(id, CompHealth):
 				new_entity_found = true
 	_assert(new_entity_found, "After flush: Spawned entity has Health")
 
@@ -392,26 +386,26 @@ func _test_commands_defer() -> void:
 # Simulate a system that produces data
 class SysProducer extends ECSParallel:
 	func _init(): super._init("Producer")
-	func _list_components() -> Dictionary:
-		return {"Val": ECSParallel.READ_WRITE}
+	func _list_components() -> Dictionary[GDScript, int]:
+		return {CompHealth: ECSParallel.READ_WRITE}
 	func _view_components(view: Dictionary, cmds: ECSSchedulerCommands) -> void:
-		# Add 1 to all entities with Val component
-		var c = view["Val"] as CompHealth
+		# Add 1 to all entities with the Health component
+		var c: CompHealth = view[CompHealth] as CompHealth
 		c.data += 1
 
 # Simulate a system that consumes data, must run after Producer
 class SysConsumer extends ECSParallel:
-	var total_sum = 0
+	var total_sum: int = 0
 	func _init(): super._init("Consumer")
-	func _list_components() -> Dictionary:
-		return {"Val": ECSParallel.READ_ONLY}
+	func _list_components() -> Dictionary[GDScript, int]:
+		return {CompHealth: ECSParallel.READ_ONLY}
 	func _parallel() -> bool: return false # Set to single-threaded for easier accumulation testing
 	func thread_function(delta: float) -> void:
 		total_sum = 0 # Reset per frame
 		super.thread_function(delta)
 		
 	func _view_components(view: Dictionary, cmds: ECSSchedulerCommands) -> void:
-		var c = view["Val"] as CompHealth
+		var c: CompHealth = view[CompHealth] as CompHealth
 		total_sum += c.data
 
 func _test_scheduler_dependency() -> void:
@@ -420,7 +414,7 @@ func _test_scheduler_dependency() -> void:
 	# Setup entities
 	for i in range(10):
 		var e = _world.create_entity()
-		e.add_component("Val", CompHealth.new(0)) # Reuse Health as general data wrapper
+		e.add(CompHealth.new(0))
 	
 	# Setup Systems
 	var sys_prod = SysProducer.new()
@@ -452,8 +446,8 @@ func _test_serialization() -> void:
 	var pos = CompPos.new()
 	pos.x = 100
 	pos.y = 200
-	e1.add_component("Pos", pos)
-	e1.add_component("Health", CompHealth.new(50))
+	e1.add(pos)
+	e1.add(CompHealth.new(50))
 	
 	# 2. Pack
 	var packer = ECSWorldPacker.new(_world)
@@ -476,18 +470,18 @@ func _test_serialization() -> void:
 	_assert(keys.size() == 1, "Entity restored count")
 	
 	if keys.size() > 0:
-		var eid = keys[0]
+		var eid: int = keys[0]
 		var e_restored = _world.get_entity(eid)
 		
-		_assert(e_restored.has_component("Pos"), "Component Pos restored")
-		_assert(e_restored.has_component("Health"), "Component Health restored")
+		_assert(e_restored.has(CompPos), "Component Pos restored")
+		_assert(e_restored.has(CompHealth), "Component Health restored")
 		
-		if e_restored.has_component("Pos"):
-			var p = e_restored.get_component("Pos") as CompPos
+		if e_restored.has(CompPos):
+			var p: CompPos = e_restored.getc(CompPos) as CompPos
 			_assert(p.x == 100 and p.y == 200, "Component custom data restored correct")
 			
-		if e_restored.has_component("Health"):
-			var h = e_restored.get_component("Health") as CompHealth
+		if e_restored.has(CompHealth):
+			var h: CompHealth = e_restored.getc(CompHealth) as CompHealth
 			_assert(h.data == 50, "Component standard data restored correct")
 
 func _test_runner_system_management() -> void:
@@ -631,9 +625,9 @@ func _test_type_index() -> void:
 	var e = _world.create_entity()
 	
 	e.add(CompHealth.new(0))
-	_assert(e.has_component(CompHealth), "Entity should have CompHealth type")
+	_assert(e.has(CompHealth), "Entity should have CompHealth type")
 	
-	var hp = e.get_component(CompHealth)
+	var hp = e.getc(CompHealth)
 	_assert(hp != null, "Get component by type should return instance")
 	_assert(hp.data == 0, "Default data value check")
 	
@@ -649,7 +643,7 @@ func _test_type_index() -> void:
 	
 	var cmds = ECSSchedulerCommands.new()
 	cmds.entity(e.id()).add_component(CompPos.new())
-	_assert(not e.has_component(CompPos), "Before flush: Component not added")
+	_assert(not e.has(CompPos), "Before flush: Component not added")
 	
 	cmds.flush(_world)
-	_assert(e.has_component(CompPos), "After flush: Component added via command buffer")
+	_assert(e.has(CompPos), "After flush: Component added via command buffer")
