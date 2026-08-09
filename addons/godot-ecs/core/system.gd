@@ -96,19 +96,18 @@ func send(e: GameEvent) -> void:
 # ==============================================================================
 
 ## Enables or disables this system's update callback.
+## Requires the system to be attached to a runner.
 ## @param enable: True to enable updates, false to disable.
 func set_update(enable: bool) -> void:
-	if _runner == null:
-		world().set_system_update(name(), enable)
-		return
-	_runner.set_system_update(_name, enable)
+	if _runner != null:
+		_runner.set_system_update(get_script() as GDScript, enable)
 
 ## Checks if this system is currently connected to the update cycle.
 ## @return: True if the system's update callback is connected.
 func is_updating() -> bool:
 	if _runner == null:
-		return world().is_system_updating(_name)
-	return _runner.is_system_updating(_name)
+		return false
+	return _runner.is_system_updating(get_script() as GDScript)
 
 # ==============================================================================
 # Override Methods
@@ -137,16 +136,27 @@ func _on_update(_delta: float) -> void:
 # ==============================================================================
 
 ## Creates the system and optionally adds it as a child of a parent node.
+## The display name is derived from the system class.
 ## @param parent: Optional parent Node to attach this system to.
-func _init(parent: Node = null):
+func _init(parent: Node = null) -> void:
 	if parent:
 		parent.add_child(self)
+	_name = _derive_name()
+	set_name(_name)
 
-## Sets the system's name identifier.
-## @param n: The StringName to assign as the system's name.
-func _set_name(n: StringName) -> void:
-	_name = n
-	set_name(n)
+## Internal: Derives a display name from the system class.
+## @return: The derived StringName identifier.
+func _derive_name() -> StringName:
+	var script: GDScript = get_script() as GDScript
+	if script == null:
+		return &"System"
+	var n: StringName = script.get_global_name()
+	if not n.is_empty():
+		return n
+	var path: String = script.resource_path
+	if not path.is_empty():
+		return path.get_file().get_basename()
+	return StringName("System_%d" % script.get_instance_id())
 
 ## Sets the world reference for this system.
 ## @param w: The ECSWorld instance to attach.

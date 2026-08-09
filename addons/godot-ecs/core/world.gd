@@ -27,18 +27,13 @@ var ignore_notify_log: Dictionary
 
 ## Emitted when a system views components, used for tracking system access patterns.
 ## @param name: The name of the system that viewed components.
-## @param components: Array of component names that were accessed.
+## @param components: Array of component classes that were accessed.
 signal on_system_viewed(name: StringName, components: Array)
-
-## Emitted each frame during update, used to trigger system execution.
-## @param delta: The time elapsed since the last frame in seconds.
-signal on_update(delta: float)
 
 var _name: StringName
 
 var _entity_id: int = 0xFFFFFFFF
 var _entity_pool: Dictionary[int, ECSEntity]
-var _system_pool: Dictionary[StringName, ECSSystem]
 var _event_pool := GameEventCenter.new()
 
 var _type_component_dict: Dictionary[StringName, Dictionary]
@@ -68,7 +63,6 @@ func name() -> StringName:
 ## Cleans up all resources held by this world including systems, schedulers, and entities.
 ## Must be called before setting the world reference to null to prevent memory leaks.
 func clear() -> void:
-	remove_all_systems()
 	remove_all_runners()
 	remove_all_schedulers()
 	remove_all_entities()
@@ -287,61 +281,6 @@ func query() -> Querier:
 	return Querier.new(self)
 
 # ==============================================================================
-# Public API - System Management
-# ==============================================================================
-
-## Adds a system to the world and connects it to the update cycle.
-## @param name: The StringName identifier for the system.
-## @param system: The ECSSystem instance to add.
-## @return: True if the system was successfully added.
-## @deprecated: Use ECSRunner.add_system() instead.
-func add_system(name: StringName, system: ECSSystem) -> bool:
-	push_warning("[Deprecated] add_system() is deprecated. Use ECSRunner.add_system() instead.")
-	remove_system(name)
-	_system_pool[name] = system
-	system._set_name(name)
-	system._set_world(self)
-	set_system_update(name, true)
-	system.on_enter(self)
-	return true
-
-## Removes a system from the world and disconnects it from the update cycle.
-## @param name: The StringName identifier for the system to remove.
-## @return: True if the system was found and removed.
-func remove_system(name: StringName) -> bool:
-	if not _system_pool.has(name):
-		return false
-	set_system_update(name, false)
-	_system_pool[name].on_exit(self)
-	return _system_pool.erase(name)
-
-## Removes all systems from the world.
-## @return: Always returns true after completion.
-func remove_all_systems() -> bool:
-	for name: StringName in _system_pool.keys():
-		remove_system(name)
-	return true
-
-## Retrieves a system by its name.
-## @param name: The StringName identifier for the system.
-## @return: The ECSSystem instance, or null if not found.
-func get_system(name: StringName) -> ECSSystem:
-	if not _system_pool.has(name):
-		return null
-	return _system_pool[name]
-
-## Returns all system names registered in this world.
-## @return: Array of StringName system identifiers.
-func get_system_keys() -> Array:
-	return _system_pool.keys()
-
-## Checks if a system with the given name exists.
-## @param name: The StringName identifier for the system.
-## @return: True if the system exists, false otherwise.
-func has_system(name: StringName) -> bool:
-	return _system_pool.has(name)
-
-# ==============================================================================
 # Public API - Event System
 # ==============================================================================
 
@@ -371,40 +310,6 @@ func send(e: GameEvent) -> void:
 	if debug_print and not ignore_notify_log.has(e.name):
 		print('send <%s> "%s", %s.' % [_name, e.name, e.data])
 	_event_pool.send(e)
-
-# ==============================================================================
-# Public API - Update Cycle
-# ==============================================================================
-
-## Triggers the update cycle, emitting the on_update signal to execute all connected systems.
-## @param delta: The time elapsed since the last frame in seconds.
-## @deprecated: Use ECSRunner.run() instead.
-func update(delta: float) -> void:
-	push_warning("[Deprecated] update() is deprecated. Use ECSRunner.run() instead.")
-	on_update.emit(delta)
-
-## Enables or disables a system's update callback.
-## @param name: The StringName identifier for the system.
-## @param enable: True to enable updates, false to disable.
-func set_system_update(name: StringName, enable: bool) -> void:
-	var system := get_system(name)
-	if system == null or not system.has_method("_on_update"):
-		return
-	if enable:
-		if not on_update.is_connected(system._on_update):
-			on_update.connect(system._on_update)
-	else:
-		if on_update.is_connected(system._on_update):
-			on_update.disconnect(system._on_update)
-
-## Checks if a system is currently connected to the update cycle.
-## @param name: The StringName identifier for the system.
-## @return: True if the system's update callback is connected.
-func is_system_updating(name: StringName) -> bool:
-	var system := get_system(name)
-	if system == null or not system.has_method("_on_update"):
-		return false
-	return on_update.is_connected(system._on_update)
 
 # ==============================================================================
 # Public API - Scheduler Management
