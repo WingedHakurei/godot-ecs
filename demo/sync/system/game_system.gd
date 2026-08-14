@@ -7,8 +7,8 @@ func _on_enter(w: ECSWorld) -> void:
 	
 	# add system (same runner as this system)
 	var runner := w.get_runner("main")
-	runner.add_system(preload("my_system.gd").new(self))
-	runner.add_system(preload("save_system.gd").new(self))
+	runner.add_system(preload("my_system.gd").new())
+	runner.add_system(preload("save_system.gd").new())
 	
 	# debug print on
 	w.debug_print = true

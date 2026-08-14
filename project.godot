@@ -28,10 +28,6 @@ window/size/viewport_height=1080
 
 project/assembly_name="GodotECS"
 
-[editor_plugins]
-
-enabled=PackedStringArray("res://addons/script-ide/plugin.cfg")
-
 [gui]
 
 common/drop_mouse_on_gui_input_disabled=true

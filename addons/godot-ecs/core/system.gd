@@ -1,10 +1,10 @@
-extends Node
+extends RefCounted
 class_name ECSSystem
 
 ## A system class for processing component data on the main thread.
-## Inherits from Node to utilize RPC functionality, which is essential for online games
-## as it greatly simplifies the implementation of network synchronization.
-## Systems can be added to the world and will receive update callbacks each frame.
+## Uses RefCounted for consistency with the rest of the ECS core (pure compute, no scene tree).
+## Networking / RPC concerns belong to the outer layer (host node / world), not the ECS core.
+## Systems are registered with an ECSRunner and receive update callbacks each frame.
 
 var _name: StringName
 var _world: ECSWorld
@@ -68,13 +68,13 @@ func on_enter(w: ECSWorld) -> void:
 	_on_enter(w)
 
 ## Called when the system is removed from the world.
-## Triggers _on_exit override for system cleanup and queues node for deletion.
+## Triggers _on_exit override for system cleanup. The system is released
+## automatically when the runner drops its reference (RefCounted).
 ## @param w: The ECSWorld this system is being removed from.
 func on_exit(w: ECSWorld) -> void:
 	if w.debug_print:
 		print("system <%s:%s> on_exit." % [world().name(), _name])
 	_on_exit(w)
-	queue_free()
 
 # ==============================================================================
 # Public API - Event System
@@ -135,14 +135,9 @@ func _on_update(_delta: float) -> void:
 # Private Methods
 # ==============================================================================
 
-## Creates the system and optionally adds it as a child of a parent node.
-## The display name is derived from the system class.
-## @param parent: Optional parent Node to attach this system to.
-func _init(parent: Node = null) -> void:
-	if parent:
-		parent.add_child(self)
+## Initializes the system and derives its display name from the system class.
+func _init() -> void:
 	_name = _derive_name()
-	set_name(_name)
 
 ## Internal: Derives a display name from the system class.
 ## @return: The derived StringName identifier.

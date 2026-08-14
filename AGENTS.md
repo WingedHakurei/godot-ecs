@@ -100,11 +100,12 @@ var message: String = "entity created"
 - Never store `World` or `Entity` references directly; use `WeakRef`
 
 ### System Design
-- **Direct Mode**: Extend `ECSSystem` (Node) for single-threaded, stateful systems; override `_on_enter/_on_exit/_on_update`
+- **Direct Mode**: Extend `ECSSystem` (RefCounted) for single-threaded, stateful systems; override `_on_enter/_on_exit/_on_update`
 - **Parallel Mode**: Extend `ECSParallel` for multi-threaded, stateless systems; `_list_components`/`_view_components` are `@abstract`
 - Systems are keyed by class (GDScript); **only one instance per class** per runner/scheduler
 - `_list_components() -> Dictionary[GDScript, int]` declares read/write access; use `_parallel() -> bool` to enable WorkerThreadPool
 - Use `before(systems: Array[GDScript])`/`after(systems: Array[GDScript])` for explicit dependency declarations
+- `ECSSystem` is `RefCounted`: systems are freed when the runner drops them (no `queue_free`); **any `world.add_callable(...)` registered in `_on_enter` MUST be removed in `_on_exit`** (Callable holds a strong ref; forgetting it leaks the system)
 
 ### Query Patterns
 ```gdscript
@@ -126,8 +127,8 @@ var query: Array[Dictionary] = world.query().with([CompHealth]).without([CompMan
 - Always call `_setup()` before and `_teardown()` after tests
 
 ### Godot-Specific Patterns
-- Use `Node` for systems that need child management (RPC support)
-- Use `RefCounted` for pure data/logic classes
+- Use `RefCounted` for pure data/logic classes (all ECS core classes, including `ECSSystem`/`ECSParallel`)
+- Use `Node` for host/scene code only (main scene, view layer); handle networking/RPC outside the ECS core
 - Use `Callable` for callbacks and deferred execution
 - Use `WorkerThreadPool` for parallel task distribution
 - Use `Time.get_ticks_usec()` for microsecond timing
@@ -142,7 +143,7 @@ const QueryCache = preload("query_cache.gd")
 - Group related functionality with `# ==============================================================================` separators
 - Mark sections: `public`, `private`, `override`, `Test Cases`
 - Keep `_init()` simple; defer complex setup
-- Use `queue_free()` in `on_exit()` for Node-based systems
+- `ECSSystem`/`ECSParallel` are `RefCounted`: released automatically when the runner/scheduler drops them (no `queue_free`)
 
 ## Project Structure
 ```
@@ -150,7 +151,7 @@ addons/
   godot-ecs/           # Framework root
 	core/              # ECS core
 	  component.gd     # ECSComponent base
-	  system.gd        # ECSSystem base (Node, direct mode)
+	  system.gd        # ECSSystem base (RefCounted, direct mode)
 	  parallel_system.gd  # ECSParallel base (@abstract)
 	  world.gd         # ECSWorld entry point
 	  entity.gd        # ECSEntity wrapper

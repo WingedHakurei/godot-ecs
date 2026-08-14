@@ -10,7 +10,7 @@ var _runner: ECSRunner
 	
 func _enter_tree() -> void:
 	_runner = _world.create_runner("main")
-	_runner.add_system(preload("../system/game_system.gd").new(self))
+	_runner.add_system(preload("../system/game_system.gd").new())
 	
 func _exit_tree() -> void:
 	_world.destroy_runner("main")
